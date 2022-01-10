@@ -151,6 +151,28 @@ class Monster extends Controller {
 		return query
 	}
 
+    vehicleBearing(endpoint, startpoint) {
+
+        function getAtan2(y, x) {
+            return Math.atan2(y, x);
+        }
+
+        var radians = getAtan2((endpoint.lon - startpoint.lon), (endpoint.lat - startpoint.lat));
+
+        var compassReading = radians * (180 / Math.PI);
+
+        var coordNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"];
+        var coordIndex = Math.round(compassReading / 45);
+        if (coordIndex < 0) {
+            coordIndex = coordIndex + 8
+        }
+
+        console.log(radians, coordNames, coordIndex)
+
+        return coordNames[coordIndex]; // returns the coordinate value
+
+    }
+
 	async handle(obj) {
 		const data = obj
 		try {
@@ -624,6 +646,14 @@ class Monster extends Controller {
 							lon: data.longitude,
 						}) : ''
 
+                        data.direction = cares.longitude ? this.vehicleBearing({
+                            lat: data.latitude,
+                            lon: data.longitude
+                        }, {
+                            lat: cares.latitude,
+                            lon: cares.longitude
+                        }) : ''
+
 						const view = {
 							...geoResult,
 							...data,
@@ -634,6 +664,8 @@ class Monster extends Controller {
 							tthm: data.tth.minutes,
 							tths: data.tth.seconds,
 							now: new Date(),
+                            distance: data.distance,
+                            direction: data.direction,
 							nowISO: new Date().toISOString(),
 							pvpUserRanking: cares.pvp_ranking_worst === 4096 ? 0 : cares.pvp_ranking_worst,
 							areas: data.matchedAreas.filter((area) => area.displayInMatches)
