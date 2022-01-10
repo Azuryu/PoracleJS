@@ -151,7 +151,7 @@ class Monster extends Controller {
 		return query
 	}
 
-    vehicleBearing(endpoint, startpoint) {
+    getDirection(endpoint, startpoint) {
 
         function getAtan2(y, x) {
             return Math.atan2(y, x);
@@ -161,15 +161,13 @@ class Monster extends Controller {
 
         var compassReading = radians * (180 / Math.PI);
 
-        var coordNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"];
+        var coordNames = ["⬆️N", "↗️NE", "➡️E", "↘️SE", "⬇️S", "↙️SW", "⬅️W", "↖️NW", "⬆️N"];
         var coordIndex = Math.round(compassReading / 45);
         if (coordIndex < 0) {
             coordIndex = coordIndex + 8
         }
 
-        console.log(radians, coordNames, coordIndex)
-
-        return coordNames[coordIndex]; // returns the coordinate value
+        return coordNames[coordIndex];
 
     }
 
@@ -646,7 +644,7 @@ class Monster extends Controller {
 							lon: data.longitude,
 						}) : ''
 
-                        data.direction = cares.longitude ? this.vehicleBearing({
+                        data.direction = cares.longitude ? this.getDirection({
                             lat: data.latitude,
                             lon: data.longitude
                         }, {
