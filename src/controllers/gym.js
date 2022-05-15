@@ -13,7 +13,7 @@ class Gym extends Controller {
 		let changeQuery = ''
 		if (data.old_team_id === data.teamId) {
 			changeQuery = 'and (1=0'
-			if (data.old_slots_available < data.slotsAvailable) {
+			if (data.old_slots_available > data.slotsAvailable) {
 				changeQuery += ' or gym.slot_changes = true'
 			}
 			if (data.inBattle) {
