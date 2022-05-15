@@ -56,8 +56,8 @@
     "default": true,
     "platform": "telegram",
     "template": {
-      "content": "{{round iv}}% {{name}}{{#if form}}{{#isnt formName 'Normal'}} {{formName}}{{/isnt}}{{/if}} cp:{{cp}} L:{{level}} {{atk}}/{{def}}/{{sta}} {{boostWeatherEmoji}}\n {{direction}} {{distance}}m  \n End: {{time}}, Time left: {{tthm}}m {{tths}}s \n {{#if weatherChange}}{{weatherChange}}\n{{/if}} {{{addr}}} \n quick: {{quickMoveName}}, charge: {{chargeMoveName}} \n {{#if pvp_rankings_great_league}}{{#compare bestGreatLeagueRank '<=' pvpDisplayMaxRank}}{{#compare bestGreatLeagueRankCP '>=' pvpDisplayGreatMinCP}}**Great league:**\n{{/compare}}{{/compare}}{{#each pvp_rankings_great_league}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpDisplayMaxRank}}{{#compare this.cp '>=' ../pvpDisplayGreatMinCP}} - {{pokemonName this.pokemon}} #{{this.rank}} @{{this.cp}}CP (Lvl. {{this.level}})\n{{/compare}}{{/compare}}{{/if}}{{/each}}{{/if}}{{#if pvp_rankings_ultra_league}}{{#compare bestUltraLeagueRank '<=' pvpDisplayMaxRank}}{{#compare bestUltraLeagueRankCP '>=' pvpDisplayUltraMinCP}}**Ultra League:**\n{{/compare}}{{/compare}}{{#each pvp_rankings_ultra_league}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpDisplayMaxRank}}{{#compare this.cp '>=' ../pvpDisplayUltraMinCP}} - {{pokemonName this.pokemon}} #{{this.rank}} @{{this.cp}}CP (Lvl. {{this.level}})\n{{/compare}}{{/compare}}{{/if}}{{/each}}{{/if}} Maps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}) | [Cords]({{{latitude}}},{{{longitude}}})",
-      "sticker": "{{{stickerUrl}}}",
+      "content": "{{round iv}}% {{name}}{{#if form}}{{#isnt formName 'Normal'}} {{formName}}{{/isnt}}{{/if}} cp:{{cp}} L:{{level}} {{atk}}/{{def}}/{{sta}} {{boostWeatherEmoji}}\n {{direction}} {{distance}}m  \n End: {{time}}, Time left: {{tthm}}m {{tths}}s \n {{#if weatherChange}}{{weatherChange}}\n{{/if}} {{{addr}}} \n quick: {{quickMoveName}}, charge: {{chargeMoveName}} \n {{#if pvp_rankings_great_league}}{{#compare bestGreatLeagueRank '<=' pvpDisplayMaxRank}}{{#compare bestGreatLeagueRankCP '>=' pvpDisplayGreatMinCP}}**Great league:**\n{{/compare}}{{/compare}}{{#each pvp_rankings_great_league}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpDisplayMaxRank}}{{#compare this.cp '>=' ../pvpDisplayGreatMinCP}} - {{pokemonName this.pokemon}} #{{this.rank}} @{{this.cp}}CP (Lvl. {{this.level}})\n{{/compare}}{{/compare}}{{/if}}{{/each}}{{/if}}{{#if pvp_rankings_ultra_league}}{{#compare bestUltraLeagueRank '<=' pvpDisplayMaxRank}}{{#compare bestUltraLeagueRankCP '>=' pvpDisplayUltraMinCP}}**Ultra League:**\n{{/compare}}{{/compare}}{{#each pvp_rankings_ultra_league}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpDisplayMaxRank}}{{#compare this.cp '>=' ../pvpDisplayUltraMinCP}} - {{pokemonName this.pokemon}} #{{this.rank}} @{{this.cp}}CP (Lvl. {{this.level}})\n{{/compare}}{{/compare}}{{/if}}{{/each}}{{/if}} Maps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})\n Cords: {{latitude}}},{{longitude}}",
+      "sticker": "",
       "location": true,
       "webpage_preview": true
     }
@@ -70,7 +70,7 @@
     "platform": "telegram",
     "template": {
       "content": "{{round iv}}% {{name}}{{#if form}}{{#isnt formName 'Normal'}} {{formName}}{{/isnt}}{{/if}} WP:{{cp}} Lvl:{{level}} {{atk}}/{{def}}/{{sta}} {{boostWeatherEmoji}}\n {{direction}} {{distance}}m \nEnde: {{time}}, Restzeit: {{tthm}}m {{tths}}s \n{{#if weatherChange}}{{weatherChange}} \n {{/if}}Adresse: {{{addr}}} \nSofort: {{quickMoveName}}, Lade: {{chargeMoveName}} \n{{#if pvp_rankings_great_league}}{{#compare bestGreatLeagueRank '<=' pvpDisplayMaxRank}}{{#compare bestGreatLeagueRankCP '>=' pvpDisplayGreatMinCP}}**Superliga:**\n{{/compare}}{{/compare}}{{#each pvp_rankings_great_league}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpDisplayMaxRank}}{{#compare this.cp '>=' ../pvpDisplayGreatMinCP}} - {{pokemonName this.pokemon}} #{{this.rank}} @{{this.cp}}WP (Lvl. {{this.level}})\n{{/compare}}{{/compare}}{{/if}}{{/each}}{{/if}}{{#if pvp_rankings_ultra_league}}{{#compare bestUltraLeagueRank '<=' pvpDisplayMaxRank}}{{#compare bestUltraLeagueRankCP '>=' pvpDisplayUltraMinCP}}**Hyperliga:**\n{{/compare}}{{/compare}}{{#each pvp_rankings_ultra_league}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpDisplayMaxRank}}{{#compare this.cp '>=' ../pvpDisplayUltraMinCP}} - {{pokemonName this.pokemon}} #{{this.rank}} @{{this.cp}}WP (Lvl. {{this.level}}) \n{{/compare}}{{/compare}}{{/if}}{{/each}}{{/if}}Maps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
+      "sticker": "",
       "location": true,
       "webpage_preview": true
     }
@@ -134,7 +134,7 @@
     "platform": "telegram",
     "template": {
       "content": "?% {{name}}{{#if form}}{{#isnt formName 'Normal'}} {{formName}}{{/isnt}}{{/if}} {{boostWeatherEmoji}} \n{{direction}} {{distance}}m \nEnds: {{time}}, Time left: {{tthm}}m {{tths}}s\n {{{addr}}}\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
+      "sticker": "",
       "location": true,
       "webpage_preview": true
     }
@@ -147,7 +147,7 @@
     "platform": "telegram",
     "template": {
       "content": "?% {{name}}{{#if form}}{{#isnt formName 'Normal'}} {{formName}}{{/isnt}}{{/if}} {{boostWeatherEmoji}}\n{{direction}} {{distance}}m \nEnde {{time}}, Restzeit {{tthm}}m {{tths}}s\nAdresse: {{{addr}}}\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
+      "sticker": "",
       "location": true,
       "webpage_preview": true
     }
@@ -223,9 +223,9 @@
     "platform": "telegram",
     "template": {
       "content": "Raid against {{name}}{{#if form}}{{#isnt formName 'Normal'}} {{formName}}{{/isnt}}{{/if}} has started at {{{gymName}}}! {{#ex}}(Ex){{/ex}}\nCP: {{cp}}, quick: {{quickMoveName}}, charge: {{chargeMoveName}} \n{{name}} lvl{{level}}. End: {{time}} in {{tthm}}m {{tths}}s\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
-      "location": true,
-      "webpage_preview": true
+      "sticker": "",
+      "location": false,
+      "webpage_preview": false
     }
   },
   {
@@ -236,9 +236,9 @@
     "platform": "telegram",
     "template": {
       "content": "Raid gegen {{name}}{{#if form}}{{#isnt formName 'Normal'}} {{formName}}{{/isnt}}{{/if}} hat begonnen bei {{{gymName}}}! {{#ex}}(Ex){{/ex}}\nWP: {{cp}}, Sofort: {{quickMoveName}}, Lade: {{chargeMoveName}}\n{{name}} Lvl{{level}}. Ende: {{time}} in {{tthm}}m {{tths}}s\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
-      "location": true,
-      "webpage_preview": true
+      "sticker": "",
+      "location": false,
+      "webpage_preview": false
     }
   },
   {
@@ -312,9 +312,9 @@
     "platform": "telegram",
     "template": {
       "content": "Raid egg level{{level}} at {{{gymName}}} {{#ex}}(Ex){{/ex}}\nHatch at: {{time}} in {{tthm}}m {{tths}}s\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
-      "location": true,
-      "webpage_preview": true
+      "sticker": "",
+      "location": false,
+      "webpage_preview": false
     }
   },
   {
@@ -325,9 +325,9 @@
     "platform": "telegram",
     "template": {
       "content": "Raid Ei Level{{level}} bei {{{gymName}}} {{#ex}}(Ex){{/ex}}\nSchlüpft um: {{time}} in {{tthm}}m {{tths}}s\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
-      "location": true,
-      "webpage_preview": true
+      "sticker": "",
+      "location": false,
+      "webpage_preview": false
     }
   },
   {
@@ -389,7 +389,7 @@
     "platform": "telegram",
     "template": {
       "content": "Pokestop: {{{pokestopName}}}\nQuest: {{{questString}}}\nReward: {{{rewardString}}} \n {{{addr}}} \n Maps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
+      "sticker": "",
       "location": true,
       "webpage_preview": true
     }
@@ -402,7 +402,7 @@
     "platform": "telegram",
     "template": {
       "content": "Pokestop: {{{pokestopName}}}\nAufgabe: {{{questString}}}\nBelohnung: {{{rewardString}}}\nAdresse: {{{addr}}}\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
+      "sticker": "",
       "location": true,
       "webpage_preview": true
     }
@@ -469,7 +469,7 @@
     "platform": "telegram",
     "template": {
       "content": "Team Rocket at {{{pokestopName}}}\nType: {{gruntType}} {{gruntTypeEmoji}}\nGender: {{genderData.name}}{{genderData.emoji}}\nPossible rewards: {{#compare gruntRewardsList.first.chance '==' 100}}{{#forEach gruntRewardsList.first.monsters}}{{this.name}}{{#unless isLast}}, {{/unless}}{{/forEach}}{{/compare}}{{#compare gruntRewardsList.first.chance '<' 100}}\n ‣ {{gruntRewardsList.first.chance}}% : {{#forEach gruntRewardsList.first.monsters}}{{this.name}}{{#unless isLast}}, {{/unless}}{{/forEach}}\n ‣ {{gruntRewardsList.second.chance}}% : {{#forEach gruntRewardsList.second.monsters}}{{this.name}}{{#unless isLast}}, {{/unless}}{{/forEach}}{{/compare}}\n Ends: {{time}}, in ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
+      "sticker": "",
       "location": true,
       "webpage_preview": true
     }
@@ -482,7 +482,7 @@
     "platform": "telegram",
     "template": {
       "content": "Team Rocket bei {{{pokestopName}}}\nTyp: {{gruntType}} {{gruntTypeEmoji}}\nGeschlecht: {{genderData.name}}{{genderData.emoji}}\nMögliche Belohnungen: {{#compare gruntRewardsList.first.chance '==' 100}}{{#forEach gruntRewardsList.first.monsters}}{{this.name}}{{#unless isLast}}, {{/unless}}{{/forEach}}{{/compare}}{{#compare gruntRewardsList.first.chance '<' 100}}\n ‣ {{gruntRewardsList.first.chance}}% : {{#forEach gruntRewardsList.first.monsters}}{{this.name}}{{#unless isLast}}, {{/unless}}{{/forEach}}\n ‣ {{gruntRewardsList.second.chance}}% : {{#forEach gruntRewardsList.second.monsters}}{{this.name}}{{#unless isLast}}, {{/unless}}{{/forEach}}{{/compare}}\nEnde: {{time}}, in ({{#if tthh}}{{tthh}}Std {{/if}}{{tthm}}m {{tths}}s)\nAdresse: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
-      "sticker": "{{{stickerUrl}}}",
+      "sticker": "",
       "location": true,
       "webpage_preview": true
     }
@@ -574,7 +574,7 @@
     "platform": "telegram",
     "template": {
       "content": "[\u200A]({{{staticMap}}})***New Nest : {{name}}***\n{{nestName}}\nFound on {{resetDate}}\nSpawns/hour: {{pokemonSpawnAvg}}",
-      "sticker": "{{{stickerUrl}}}",
+      "sticker": "",
       "location": false,
       "webpage_preview": true
     }
@@ -604,7 +604,7 @@
     "platform": "telegram",
     "template": {
       "webpage_preview": false,
-      "location": true,
+      "location": false,
       "content": [
         "***⚠️ Gym change ⚠️***",
         "\nGym change at {{{gymName}}} {{#if previousControlName}}from {{previousControlName}} {{/if}}to {{teamName}}",

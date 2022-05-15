@@ -662,6 +662,8 @@ class Monster extends Controller {
 							tthm: data.tth.minutes,
 							tths: data.tth.seconds,
 							now: new Date(),
+							latitude: data.latitude,
+							longitude: data.longitude,
                             distance: data.distance,
                             direction: data.direction,
 							nowISO: new Date().toISOString(),
