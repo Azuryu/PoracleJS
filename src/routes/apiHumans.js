@@ -1,9 +1,10 @@
 const communityLogic = require('../lib/communityLogic')
 const DiscordUtil = require('../lib/discord/discordUtil')
+const DiscordRoleSetter = require('../lib/discord/discordRoleSetter')
 
 module.exports = async (fastify, options, next) => {
 	fastify.get('/api/humans/:id', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -24,9 +25,12 @@ module.exports = async (fastify, options, next) => {
 		let allowedAreas = fastify.geofence.map((x) => x.name.toLowerCase())
 		if (fastify.config.areaSecurity.enabled && !fastify.config.discord.admins.includes(req.params.id)
 		&& !fastify.config.telegram.admins.includes(req.params.id)) {
-			allowedAreas = communityLogic.filterAreas(fastify.config, human.community_membership
-				? JSON.parse(human.community_membership) : [],
-			allowedAreas)
+			allowedAreas = communityLogic.filterAreas(
+				fastify.config,
+				human.community_membership
+					? JSON.parse(human.community_membership) : [],
+				allowedAreas,
+			)
 		}
 
 		return {
@@ -35,13 +39,106 @@ module.exports = async (fastify, options, next) => {
 				name: x.name,
 				group: x.group || '',
 				description: x.description || '',
-				userSelectable: (x.userSelectable === undefined || x.userSelectable),
+				userSelectable: !!(x.userSelectable ?? true),
 			})),
 		}
 	})
 
+	fastify.get('/api/humans/:id/roles', options, async (req) => {
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
+
+		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
+		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
+
+		const secret = req.headers['x-poracle-secret']
+		if (!secret || !fastify.config.server.apiSecret || secret !== fastify.config.server.apiSecret) {
+			return { status: 'authError', reason: 'incorrect or missing api secret' }
+		}
+		const human = await fastify.query.selectOneQuery('humans', { id: req.params.id })
+
+		if (!human) {
+			return {
+				status: 'error',
+				message: 'User not found',
+			}
+		}
+
+		if (human.type !== 'discord:user') {
+			return []
+		}
+
+		const roleSetter = new DiscordRoleSetter(fastify.discordClient, fastify.config, fastify.logger)
+
+		return {
+			status: 'ok',
+			guilds: await roleSetter.list(human.id),
+		}
+	})
+
+	fastify.post('/api/humans/:id/roles/add/:roleId', options, async (req) => {
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
+
+		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
+		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
+
+		const secret = req.headers['x-poracle-secret']
+		if (!secret || !fastify.config.server.apiSecret || secret !== fastify.config.server.apiSecret) {
+			return { status: 'authError', reason: 'incorrect or missing api secret' }
+		}
+		const human = await fastify.query.selectOneQuery('humans', { id: req.params.id })
+
+		if (!human) {
+			return {
+				status: 'error',
+				message: 'User not found',
+			}
+		}
+
+		if (human.type !== 'discord:user') {
+			return []
+		}
+
+		const roleSetter = new DiscordRoleSetter(fastify.discordClient, fastify.config, fastify.logger)
+
+		return {
+			status: 'ok',
+			result: await roleSetter.setRole(human.id, req.params.roleId, true),
+		}
+	})
+
+	fastify.post('/api/humans/:id/roles/remove/:roleId', options, async (req) => {
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
+
+		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
+		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
+
+		const secret = req.headers['x-poracle-secret']
+		if (!secret || !fastify.config.server.apiSecret || secret !== fastify.config.server.apiSecret) {
+			return { status: 'authError', reason: 'incorrect or missing api secret' }
+		}
+		const human = await fastify.query.selectOneQuery('humans', { id: req.params.id })
+
+		if (!human) {
+			return {
+				status: 'error',
+				message: 'User not found',
+			}
+		}
+
+		if (human.type !== 'discord:user') {
+			return []
+		}
+
+		const roleSetter = new DiscordRoleSetter(fastify.discordClient, fastify.config, fastify.logger)
+
+		return {
+			status: 'ok',
+			result: await roleSetter.setRole(human.id, req.params.roleId, false),
+		}
+	})
+
 	fastify.get('/api/humans/:id/getAdministrationRoles', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -73,8 +170,12 @@ module.exports = async (fastify, options, next) => {
 
 				if (fastify.config.discord.delegatedAdministration && fastify.config.discord.delegatedAdministration.channelTracking
 						&& Object.keys(fastify.config.discord.delegatedAdministration.channelTracking).length) {
-					const dr = new DiscordUtil(fastify.discordWorker.client,
-						fastify.log, fastify.config, fastify.query)
+					const dr = new DiscordUtil(
+						fastify.discordWorker.client,
+						fastify.logger,
+						fastify.config,
+						fastify.query,
+					)
 
 					roles = await dr.getUserRoles(req.params.id)
 
@@ -86,6 +187,8 @@ module.exports = async (fastify, options, next) => {
 							if (!channels) {
 								channels = await dr.getAllChannels()
 							}
+							fastify.logger.debug(`getAdministrationRoles - all channels: ${JSON.stringify(channels)}`)
+
 							if (fastify.config.discord.guilds.includes(id)) {
 								// push whole guild
 								result.discord.channels.push(...channels[id].map((x) => x.id))
@@ -108,8 +211,12 @@ module.exports = async (fastify, options, next) => {
 				if (fastify.config.discord.delegatedAdministration && fastify.config.discord.delegatedAdministration.webhookTracking
 					&& Object.keys(fastify.config.discord.delegatedAdministration.webhookTracking).length) {
 					if (!roles) {
-						const dr = new DiscordUtil(fastify.discordWorker.client,
-							fastify.log, fastify.config, fastify.query)
+						const dr = new DiscordUtil(
+							fastify.discordWorker.client,
+							fastify.logger,
+							fastify.config,
+							fastify.query,
+						)
 
 						roles = await dr.getUserRoles(req.params.id)
 					}
@@ -122,8 +229,12 @@ module.exports = async (fastify, options, next) => {
 
 				if (fastify.config.discord.delegatedAdministration && fastify.config.discord.delegatedAdministration.userTracking) {
 					if (!roles) {
-						const dr = new DiscordUtil(fastify.discordWorker.client,
-							fastify.log, fastify.config, fastify.query)
+						const dr = new DiscordUtil(
+							fastify.discordWorker.client,
+							fastify.logger,
+							fastify.config,
+							fastify.query,
+						)
 
 						roles = await dr.getUserRoles(req.params.id)
 					}
@@ -155,7 +266,7 @@ module.exports = async (fastify, options, next) => {
 				admin: result,
 			}
 		} catch (err) {
-			fastify.logger.error(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`, err)
+			fastify.logger.error(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`, err)
 			return {
 				status: 'error',
 				message: 'Exception raised during execution',
@@ -164,7 +275,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.get('/api/humans/:id/checkLocation/:lat/:lon', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -199,7 +310,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.post('/api/humans/:id/setLocation/:lat/:lon', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -221,7 +332,7 @@ module.exports = async (fastify, options, next) => {
 		const currentProfileNo = human.current_profile_no
 		const { lat, lon } = req.params
 
-		if (fastify.config.areaSecurity.enabled) {
+		if (fastify.config.areaSecurity.enabled && human.area_restriction) {
 			const allowedFences = JSON.parse(human.area_restriction)
 			const areas = fastify.query.pointInArea([lat, lon])
 			if (!allowedFences.some((x) => areas.includes(x))) {
@@ -241,7 +352,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.post('/api/humans/:id/switchProfile/:profile', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -269,13 +380,16 @@ module.exports = async (fastify, options, next) => {
 			}
 		}
 
-		await fastify.query.updateQuery('humans',
+		await fastify.query.updateQuery(
+			'humans',
 			{
 				current_profile_no: profileNo,
 				area: profile.area,
 				latitude: profile.latitude,
 				longitude: profile.longitude,
-			}, { id: req.params.id })
+			},
+			{ id: req.params.id },
+		)
 
 		return {
 			status: 'ok',
@@ -283,7 +397,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.post('/api/humans/:id/setAreas', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -311,9 +425,12 @@ module.exports = async (fastify, options, next) => {
 		if (!adminTarget) allowedAreas = allowedAreas.filter((area) => (area.userSelectable === undefined || area.userSelectable))
 		allowedAreas = allowedAreas.map((x) => x.name.toLowerCase())
 		if (fastify.config.areaSecurity.enabled && !adminTarget) {
-			allowedAreas = communityLogic.filterAreas(fastify.config, human.community_membership
-				? JSON.parse(human.community_membership) : [],
-			allowedAreas)
+			allowedAreas = communityLogic.filterAreas(
+				fastify.config,
+				human.community_membership
+					? JSON.parse(human.community_membership) : [],
+				allowedAreas,
+			)
 		}
 
 		const newAreas = areas.filter((x) => allowedAreas.some((y) => y.toLowerCase() === x))
@@ -332,7 +449,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.post('/api/humans/:id/start', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -350,10 +467,13 @@ module.exports = async (fastify, options, next) => {
 			}
 		}
 
-		await fastify.query.updateQuery('humans',
+		await fastify.query.updateQuery(
+			'humans',
 			{
 				enabled: 1,
-			}, { id: req.params.id })
+			},
+			{ id: req.params.id },
+		)
 
 		return {
 			status: 'ok',
@@ -361,7 +481,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.post('/api/humans/:id/stop', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -379,10 +499,13 @@ module.exports = async (fastify, options, next) => {
 			}
 		}
 
-		await fastify.query.updateQuery('humans',
+		await fastify.query.updateQuery(
+			'humans',
 			{
 				enabled: 0,
-			}, { id: req.params.id })
+			},
+			{ id: req.params.id },
+		)
 
 		return {
 			status: 'ok',
@@ -390,7 +513,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.get('/api/humans/one/:id', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }

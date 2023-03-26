@@ -76,7 +76,11 @@
       "shortlinkProvider": "hideuri",
       "shortlinkProviderURL": "",
       "shortlinkProviderKey": "",
-      "shortlinkProviderDomain": ""           // if supported, select domain to be used
+      "shortlinkProviderDomain": "",           // if supported, select domain to be used
+    // additional Shortlinks to Pogo Maps in DTS - supported RDM, Reactmap, RocketMAD
+      "rdmURL": "",                // https://myRDM.com/
+      "reactMapURL": "",           // https://myReactMap.com/
+      "rocketMadURL": ""           // https://myRocketMAD.com/
   },
   //
   // Configuration for the user reconciliation/role check function
@@ -185,22 +189,23 @@
   //   would match an eevee)
   //
   "pvp": {
-      "dataSource": "webhook",                      // webhook - from hooks, internal - internal calculator
+      "dataSource": "internal",                      // webhook - from hooks, internal - internal calculator
       "levelCaps": [50],                            // internal: level caps to be included in internal rank calculations - alternative could be [50, 51]
       "includeMegaEvolution": false,                // internal: whether to include mega evolutions in rank calculations
       "littleLeagueCanEvolve": false,               // internal: whether little league mons that are evolved are included
       "pvpEvolutionDirectTracking": false,          // pvpEvolutionDirectTracking - whether users can track pvp evolutions directly (eg vaporean would match an eevee)
+      "filterByTrack": false,                       // whether new style PVP listings are auto-filtered by user's track requirements
     // pvpDisplay* - these are variables that will be passed into DTS to allow you to perform
     //   a filtering calculation
       "pvpDisplayMaxRank": 10,
-      "pvpDisplayGreatMinCP": 1450,
-      "pvpDisplayUltraMinCP": 2450,
+      "pvpDisplayGreatMinCP": 1400,
+      "pvpDisplayUltraMinCP": 2350,
       "pvpDisplayLittleMinCP": 450,
     // pvpFilter* - these filters are used as minimums on the track command to help users get
     //   PVP tracking right and to eliminate unexpectedly large tracks
       "pvpFilterMaxRank": 10,
-      "pvpFilterGreatMinCP": 1450,
-      "pvpFilterUltraMinCP": 2450,
+      "pvpFilterGreatMinCP": 1400,
+      "pvpFilterUltraMinCP": 2350,
       "pvpFilterLittleMinCP": 450
   },
   //
@@ -215,7 +220,8 @@
       "everythingFlagPermissions": "allow-any",
       "defaultDistance": 0,                       // if you are doing distance tracking only (no areas), this is a default for users
       "maxDistance": 0,                           // restrict users from having too large a tracking circle (0 = no limit)
-      "enableGymBattle": false                    // allow users to use "battle_changes" option into !gym tracking command
+      "enableGymBattle": false,                   // allow users to use "battle_changes" option into !gym tracking command
+      "defaultUserTrackingLevelCap": 0            // user default for pvp tracking level cap - 0 all levels
   },
   //
   // stats configuration
@@ -301,7 +307,9 @@
     // unrecognisedCommandMessage - message to reply to users who send an unrecognised command in DM
       "unrecognisedCommandMessage": "",
     // unregisteredMessage - message to reply to users who send a DM but are unregistered (default of empty gives a shrug)
-      "unregisteredUserMessage": ""
+      "unregisteredUserMessage": "",
+    // lostRoleMessage - message to send to user when they have lost their role base access
+      "lostRoleMessage": ""
   },
 
   //
@@ -336,7 +344,9 @@
       "groupWelcomeText": "Welcome {user}, remember to click on me and 'start bot' to be able to receive messages",
     // botWelcomeText - message the bot sends to users who register
       "botWelcomeText": "You are now registered with Poracle",
-  // unregisteredMessage - message to reply to users who send a DM but are unregistered (default of empty gives a shrug)
+    // botGoodbyeMessage - message to send to user when they have lost their access (through reconciliation)
+      "botGoodbyeMessage": "",
+    // unregisteredMessage - message to reply to users who send a DM but are unregistered (default of empty gives a shrug)
       "unregisteredUserMessage": "",
     // unrecognisedCommandMessage - message to reply to users who send an unrecognised command in DM
       "unrecognisedCommandMessage": "",
@@ -434,6 +444,7 @@
     //   or google (geocoding key provides an array of google API keys)
       "provider": "none",
       "providerURL": "",
+      "forwardOnly": false, // When true, disable reverse geocoding lookup
       "cacheDetail": 3,     // number of decimal places of lon/lat to use while caching geocoding (default 3 - or use 4 for 100x more detail)
     // staticProvider - this is your provider of map tiles; can be tileservercache
     //   (swift tile server - https://github.com/123FLO321/SwiftTileserverCache)
@@ -469,7 +480,19 @@
       "spriteWidth": 20,
       "scale": 2,
       "type": "klokantech-basic"
-    },
+  },
+  // fallback urls if something goes wrong
+  "fallbacks": {
+    "staticMap": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png",
+    // Various imgUrl fallbacks
+    "imgUrl": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/mon.png",
+    "imgUrlWeather": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/weather.png",
+    "imgUrlEgg": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/uni.png",
+    "imgUrlGym": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/gym.png",
+    "imgUrlPokestop": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png",
+    // Used for pokestop urls in quests
+    "pokestopUrl": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png"
+  },
   //
   // Fine tuning.  We do not recommend that you change these settings without talking to us in discord.
   // But for reference here are some internal settings that can be tunes.
@@ -489,6 +512,7 @@
   // concurrentDiscordWebhookConnections - How many concurrent discord webhook destinations to send to at once
   //
   "tuning": {
+    "fastMonsters": false,
     "maxDatabaseConnections": 15,
     "webhookProcessingWorkers": 5,
     "concurrentWebhookProcessorsPerWorker": 4,

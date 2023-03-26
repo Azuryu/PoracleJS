@@ -1,5 +1,7 @@
 const geoTz = require('geo-tz')
 const moment = require('moment-timezone')
+require('moment-precise-range-plugin')
+
 const Controller = require('./controller')
 /**
  * Controller for processing pokestop webhooks
@@ -72,16 +74,27 @@ class Lure extends Controller {
 			const logReference = data.pokestop_id
 
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://www.google.com/maps/search/?api=1&query=${data.latitude},${data.longitude}`
+			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
 			data.appleMapUrl = `https://maps.apple.com/maps?daddr=${data.latitude},${data.longitude}`
 			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
+			if (this.config.general.rdmURL) {
+				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@pokestop/${data.pokestop_id}`
+			}
+			if (this.config.general.reactMapURL) {
+				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/pokestops/${data.pokestop_id}`
+			}
+			if (this.config.general.rocketMadURL) {
+				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
+			}
 			data.name = data.name ? this.escapeJsonString(data.name) : this.escapeJsonString(data.pokestop_name)
 			data.pokestopName = data.name
+			data.url = data.url || this.config.fallbacks?.pokestopUrl
 			data.pokestopUrl = data.url
 
 			const lureExpiration = data.lure_expiration
 			data.tth = moment.preciseDiff(Date.now(), lureExpiration * 1000, true)
-			data.disappearTime = moment(lureExpiration * 1000).tz(geoTz(data.latitude, data.longitude).toString()).format(this.config.locale.time)
+			const disappearTime = moment(lureExpiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString())
+			data.disappearTime = disappearTime.format(this.config.locale.time)
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.distime = data.disappearTime // deprecated
@@ -103,7 +116,11 @@ class Lure extends Controller {
 			data.lureTypeColor = this.GameData.utilData.lures[data.lure_id].color
 			data.lureTypeNameEng = this.GameData.utilData.lures[data.lure_id].name
 
-			const whoCares = await this.lureWhoCares(data)
+			const whoCares = data.poracleTest ? [{
+				...data.poracleTest,
+				clean: false,
+				ping: '',
+			}] : await this.lureWhoCares(data)
 
 			if (whoCares.length) {
 				this.log.info(`${logReference}: Lure of type ${data.lureTypeNameEng} at ${data.pokestopName} appeared in areas (${data.matched}) and ${whoCares.length} humans cared.`)
@@ -126,15 +143,17 @@ class Lure extends Controller {
 
 			setImmediate(async () => {
 				try {
-					data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId)
-					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId)
-					data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId)
+					if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
+					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
+					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId)
 
 					const geoResult = await this.getAddress({
 						lat: data.latitude,
 						lon: data.longitude,
 					})
 					const jobs = []
+
+					require('./common/nightTime').setNightTime(data, disappearTime)
 
 					await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId'])
 					data.staticmap = data.staticMap // deprecated

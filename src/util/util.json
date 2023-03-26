@@ -571,6 +571,13 @@
 		"5": "Ultra-Rare",
 		"6": "Unseen"
 	},
+	"size": {
+		"1": "XXS",
+		"2": "XS",
+		"3": "M",
+		"4": "XL",
+		"5": "XXL"
+	},
 	"megaName": {
 		"0": "{0}",
 		"1": "Mega {0}",
@@ -792,7 +799,7 @@
 			"min": 650,
 			"max": 721,
 			"name": "Kalos",
-			"roman": "VII"
+			"roman": "VI"
 		},
 		"7": {
 			"min": 722,
@@ -844,6 +851,20 @@
 		"562_2344": "8",
 		"618_2345": "8"
 	},
+	"raidLevels": {
+		"1": "Level 1",
+		"2": "Level 2",
+		"3": "Level 3",
+		"4": "Level 4",
+		"5": "Legendary",
+		"6": "Mega",
+		"7": "Mega Legendary",
+		"8": "Ultra Beast",
+		"9": "Elite",
+		"10": "Unknown",
+		"11": "Unknown",
+		"12": "Unknown"
+	},
 	"emojis": {
 		"lure-normal": "\ud83d\udccd",
 		"lure-glacial": "\u2744",
@@ -883,6 +904,14 @@
 		"team-mystic": "\uD83D\uDD35",
 		"team-valor": "\uD83D\uDD34",
 		"team-instinct": "\uD83D\uDFE1",
-		"shiny": "✨"
+		"shiny": "✨",
+		"north": "\u2b06\ufe0f",
+		"northwest": "\u2197\ufe0f",
+		"west": "\u27a1\ufe0f",
+		"southwest": "\u2198\ufe0f",
+		"south":"\u2b07\ufe0f",
+		"southeast": "\u2199\ufe0f",
+		"east": "\u2b05\ufe0f",
+		"northeast": "\u2196\ufe0f"
 	}
 }

@@ -1,5 +1,7 @@
 const geoTz = require('geo-tz')
 const moment = require('moment-timezone')
+require('moment-precise-range-plugin')
+
 const Controller = require('./controller')
 
 class Invasion extends Controller {
@@ -70,16 +72,28 @@ class Invasion extends Controller {
 			const logReference = data.pokestop_id
 
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://www.google.com/maps/search/?api=1&query=${data.latitude},${data.longitude}`
+			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
 			data.appleMapUrl = `https://maps.apple.com/maps?daddr=${data.latitude},${data.longitude}`
 			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
+			if (this.config.general.rdmURL) {
+				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@pokestop/${data.pokestop_id}`
+			}
+			if (this.config.general.reactMapURL) {
+				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/pokestops/${data.pokestop_id}`
+			}
+			if (this.config.general.rocketMadURL) {
+				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
+			}
 			data.name = data.name ? this.escapeJsonString(data.name) : this.escapeJsonString(data.pokestop_name)
 			data.pokestopName = data.name
+			data.url = data.url || this.config.fallbacks?.pokestopUrl
 			data.pokestopUrl = data.url
 
-			const incidentExpiration = data.incident_expiration ? data.incident_expiration : data.incident_expire_timestamp
+			const incidentExpiration = data.incident_expiration ?? data.incident_expire_timestamp
+			data.incidentExpiration = incidentExpiration
 			data.tth = moment.preciseDiff(Date.now(), incidentExpiration * 1000, true)
-			data.disappearTime = moment(incidentExpiration * 1000).tz(geoTz(data.latitude, data.longitude).toString()).format(this.config.locale.time)
+			const disappearTime = moment(incidentExpiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString())
+			data.disappearTime = disappearTime.format(this.config.locale.time)
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.distime = data.disappearTime // deprecated
@@ -117,13 +131,17 @@ class Invasion extends Controller {
 				data.gruntRewards = ''
 				if (data.gruntTypeId in this.GameData.grunts) {
 					const gruntType = this.GameData.grunts[data.gruntTypeId]
-					data.gruntName = `${gruntType.type} ${gruntType.grunt}`
+					data.gruntName = (gruntType.type !== gruntType.name) ? `${gruntType.type} ${gruntType.grunt}` : gruntType.name
 					data.gender = gruntType.gender
 					data.gruntType = gruntType.type
 				}
 			}
 
-			const whoCares = await this.invasionWhoCares(data)
+			const whoCares = data.poracleTest ? [{
+				...data.poracleTest,
+				clean: false,
+				ping: '',
+			}] : await this.invasionWhoCares(data)
 
 			if (whoCares.length) {
 				this.log.info(`${logReference}: Invasion of type ${data.gruntType} at ${data.pokestopName} appeared in areas (${data.matched}) and ${whoCares.length} humans cared.`)
@@ -146,12 +164,18 @@ class Invasion extends Controller {
 
 			setImmediate(async () => {
 				try {
-					data.imgUrl = await this.imgUicons.invasionIcon(data.gruntTypeId)
-					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.invasionIcon(data.gruntTypeId)
-					data.stickerUrl = await this.stickerUicons.invasionIcon(data.gruntTypeId)
+					if (this.imgUicons) data.imgUrl = await this.imgUicons.invasionIcon(data.gruntTypeId) || this.config.fallbacks?.imgUrlPokestop
+					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.invasionIcon(data.gruntTypeId) || this.config.fallbacks?.imgUrlPokestop
+					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.invasionIcon(data.gruntTypeId)
 
 					const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 					const jobs = []
+
+					require('./common/nightTime').setNightTime(data, disappearTime)
+
+					// Get current cell weather from cache
+					const weatherCellId = this.weatherData.getWeatherCellId(data.latitude, data.longitude)
+					const currentCellWeather = this.weatherData.getCurrentWeatherInCell(weatherCellId)
 
 					await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'gruntTypeId'])
 					data.staticmap = data.staticMap // deprecated
@@ -173,6 +197,7 @@ class Invasion extends Controller {
 						if (platform === 'webhook') platform = 'discord'
 
 						data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup('grunt-unknown', platform))
+						require('./common/weather').setGameWeather(data, translator, this.GameData, this.emojiLookup, platform, currentCellWeather)
 
 						// full build
 						if (data.gruntTypeId) {
@@ -235,17 +260,18 @@ class Invasion extends Controller {
 										})
 									} else {
 										// Single Reward 100% of encounter (might vary based on actual fight).
+										// && Giovanni or other third reward rockets
 										let first = true
-										gruntType.encounters.first.forEach((fr) => {
+										gruntType.encounters[gruntType.thirdReward ? 'third' : 'first'].forEach((tr) => {
 											if (!first) gruntRewards += ', '
 											else first = false
 
-											const firstReward = +fr
-											const firstRewardMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === firstReward && !mon.form.id)
-											gruntRewards += firstRewardMonster ? translator.translate(firstRewardMonster.name) : ''
+											const reward = +tr
+											const rewardMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === reward && !mon.form.id)
+											gruntRewards += rewardMonster ? translator.translate(rewardMonster.name) : ''
 											gruntRewardsList.first.monsters.push({
-												id: firstReward,
-												name: translator.translate(firstRewardMonster.name),
+												id: reward,
+												name: translator.translate(rewardMonster.name),
 											})
 										})
 									}

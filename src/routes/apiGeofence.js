@@ -2,7 +2,7 @@ const geofenceTileGenerator = require('../lib/geofenceTileGenerator')
 
 module.exports = async (fastify, options, next) => {
 	fastify.get('/api/geofence/:area/map', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -26,7 +26,7 @@ module.exports = async (fastify, options, next) => {
 				url,
 			}
 		} catch (err) {
-			fastify.logger.error(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`, err)
+			fastify.logger.error(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`, err)
 			return {
 				status: 'error',
 			}
@@ -34,7 +34,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.get('/api/geofence/distanceMap/:lat/:lon/:distance', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -63,14 +63,18 @@ module.exports = async (fastify, options, next) => {
 		}
 
 		try {
-			const url = await geofenceTileGenerator.generateDistanceTile(fastify.query.tileserverPregen,
-				lat, lon, distance)
+			const url = await geofenceTileGenerator.generateDistanceTile(
+				fastify.query.tileserverPregen,
+				lat,
+				lon,
+				distance,
+			)
 			return {
 				status: 'ok',
 				url,
 			}
 		} catch (err) {
-			fastify.logger.error(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`, err)
+			fastify.logger.error(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`, err)
 			return {
 				status: 'error',
 				message: 'Exception raised during execution',
@@ -79,7 +83,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.get('/api/geofence/locationMap/:lat/:lon', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
@@ -97,14 +101,17 @@ module.exports = async (fastify, options, next) => {
 		}
 
 		try {
-			const url = await geofenceTileGenerator.generateLocationTile(fastify.query.tileserverPregen,
-				req.params.lat, req.params.lon)
+			const url = await geofenceTileGenerator.generateLocationTile(
+				fastify.query.tileserverPregen,
+				req.params.lat,
+				req.params.lon,
+			)
 			return {
 				status: 'ok',
 				url,
 			}
 		} catch (err) {
-			fastify.logger.error(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`, err)
+			fastify.logger.error(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`, err)
 			return {
 				status: 'error',
 			}
@@ -112,7 +119,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.get('/api/geofence/all/hash', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) {
 			return {
@@ -144,7 +151,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.get('/api/geofence/all', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) {
 			return {
@@ -171,7 +178,7 @@ module.exports = async (fastify, options, next) => {
 	})
 
 	fastify.get('/api/geofence/all/geojson', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) {
 			return {
@@ -207,8 +214,8 @@ module.exports = async (fastify, options, next) => {
 					id: inGeofence.id || 0,
 					group: inGeofence.group || '',
 					description: inGeofence.description || '',
-					userSelectable: inGeofence.userSelectable === undefined || inGeofence.userSelectable,
-					displayInMatches: inGeofence.displayInMatches === undefined || inGeofence.displayInMatches,
+					userSelectable: inGeofence.userSelectable ?? true,
+					displayInMatches: inGeofence.displayInMatches ?? true,
 				},
 				geometry: {
 					type: 'Polygon',

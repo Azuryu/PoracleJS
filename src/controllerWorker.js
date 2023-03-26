@@ -3,7 +3,6 @@ const { writeHeapSnapshot } = require('v8')
 // eslint-disable-next-line no-underscore-dangle
 require('events').EventEmitter.prototype._maxListeners = 100
 const NodeCache = require('node-cache')
-const path = require('path')
 const PogoEventParser = require('./lib/pogoEventParser')
 const ShinyPossible = require('./lib/shinyLoader')
 const logs = require('./lib/logger')
@@ -33,6 +32,8 @@ const PokestopLureController = require('./controllers/pokestop_lure')
 const NestController = require('./controllers/nest')
 const ControllerWeatherManager = require('./controllers/weatherData')
 const StatsData = require('./controllers/statsData')
+const CachingGeocoder = require('./lib/cachingGeocoder')
+const MonsterAlarmMatch = require('./controllers/monsterAlarmMatch')
 
 /**
  * Contains currently rate limited users
@@ -45,19 +46,24 @@ const statsData = new StatsData(config, log)
 const pogoEventParser = new PogoEventParser(log)
 const shinyPossible = new ShinyPossible(log)
 const scannerQuery = scannerFactory.createScanner(scannerKnex, config.database.scannerType)
+const cachingGeocoder = new CachingGeocoder(config, log, mustache, `geoCache-${workerId}`)
 
 const eventParsers = {
 	shinyPossible,
 	pogoEvents: pogoEventParser,
 }
 
-const monsterController = new MonsterController(logs.controller, knex, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
-const raidController = new RaidController(logs.controller, knex, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
-const questController = new QuestController(logs.controller, knex, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
-const pokestopController = new PokestopController(logs.controller, knex, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
-const nestController = new NestController(logs.controller, knex, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
-const pokestopLureController = new PokestopLureController(logs.controller, knex, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
-const gymController = new GymController(logs.controller, knex, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
+const monsterController = new MonsterController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
+const raidController = new RaidController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
+const questController = new QuestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
+const pokestopController = new PokestopController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
+const nestController = new NestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
+const pokestopLureController = new PokestopLureController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
+const gymController = new GymController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, controllerWeatherManager, statsData, eventParsers)
+
+const monsterAlarmMatch = new MonsterAlarmMatch(logs.controller, knex, config)
+
+monsterController.monsterMatch = monsterAlarmMatch
 
 const hookQueue = []
 let queuePort
@@ -89,22 +95,21 @@ async function processOne(hook) {
 				}
 				break
 			}
-			case 'invasion':
-			case 'pokestop': {
-				if (hook.message.lure_expiration) {
-					const result = await pokestopLureController.handle(hook.message)
-					if (result) {
-						queueAddition = result
-					} else {
-						log.error(`Worker ${workerId}: Missing result from ${hook.type} processor`, { data: hook.message })
-					}
+			case 'invasion': {
+				const result = await pokestopController.handle(hook.message)
+				if (result) {
+					queueAddition = result
 				} else {
-					const result = await pokestopController.handle(hook.message)
-					if (result) {
-						queueAddition = result
-					} else {
-						log.error(`Worker ${workerId}: Missing result from ${hook.type} processor`, { data: hook.message })
-					}
+					log.error(`Worker ${workerId}: Missing result from ${hook.type} processor`, { data: hook.message })
+				}
+				break
+			}
+			case 'lure': {
+				const result = await pokestopLureController.handle(hook.message)
+				if (result) {
+					queueAddition = result
+				} else {
+					log.error(`Worker ${workerId}: Missing result from ${hook.type} processor`, { data: hook.message })
 				}
 				break
 			}
@@ -190,7 +195,7 @@ function reloadDts() {
 
 function reloadGeofence() {
 	try {
-		const newGeofence = require('./lib/geofenceLoader').readGeofenceFile(config, path.join(__dirname, `../${config.geofence.path}`))
+		const newGeofence = require('./lib/geofenceLoader').readAllGeofenceFiles(config)
 		monsterController.setGeofence(newGeofence)
 		raidController.setGeofence(newGeofence)
 		questController.setGeofence(newGeofence)
@@ -251,6 +256,10 @@ function receiveCommand(cmd) {
 
 			reloadGeofence()
 		}
+		if (cmd.type === 'refreshAlertCache') {
+			log.debug(`Worker ${workerId}: Received reload alert broadcast`)
+			monsterAlarmMatch.loadData().catch(() => {})
+		}
 	} catch (err) {
 		log.error(`Worker ${workerId}: receiveCommand failed to processs command`, err)
 	}
@@ -305,5 +314,6 @@ if (!isMainThread) {
 	pokestopLureController.on('postMessage', (jobs) => queuePort.postMessage({ queue: jobs }))
 	gymController.on('postMessage', (jobs) => queuePort.postMessage({ queue: jobs }))
 
+	monsterAlarmMatch.loadData().catch(() => {})
 	setInterval(currentStatus, 60000)
 }

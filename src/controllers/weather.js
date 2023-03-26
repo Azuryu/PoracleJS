@@ -5,15 +5,15 @@ const S2ts = require('nodes2ts')
 const path = require('path')
 const pcache = require('flat-cache')
 const { Mutex } = require('async-mutex')
-const Controller = require('./controller')
 require('moment-precise-range-plugin')
+const Controller = require('./controller')
 
 const weatherKeyCache = pcache.load('weatherKeyCache', path.join(__dirname, '../../.cache'))
 const weatherCache = pcache.load('weatherCache', path.join(__dirname, '../../.cache'))
 
 class Weather extends Controller {
-	constructor(log, db, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache) {
-		super(log, db, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache, null, null, null)
+	constructor(log, db, geocoder, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache) {
+		super(log, db, geocoder, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache, null, null, null)
 		this.controllerData = weatherCache.getKey('weatherCacheData') || {}
 		this.caresData = weatherCache.getKey('caredPokemon') || {}
 
@@ -323,6 +323,8 @@ class Weather extends Controller {
 
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 
+			require('./common/nightTime').setNightTime(data, moment())
+
 			if (pregenerateTile && !this.config.weather.showAlteredPokemonStaticMap) {
 				const tileServerOptions = this.tileserverPregen.getConfigForTileType('weather')
 
@@ -338,9 +340,9 @@ class Weather extends Controller {
 
 			data.matchedAreas = this.pointInArea([data.latitude, data.longitude])
 			data.matched = data.matchedAreas.map((x) => x.name.toLowerCase())
-			data.imgUrl = await this.imgUicons.weatherIcon(data.condition)
-			if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.weatherIcon(data.condition)
-			data.stickerUrl = await this.stickerUicons.weatherIcon(data.condition)
+			if (this.imgUicons) data.imgUrl = await this.imgUicons.weatherIcon(data.condition) || this.config.fallbacks?.imgUrlWeather
+			if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.weatherIcon(data.condition) || this.config.fallbacks?.imgUrlWeather
+			if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.weatherIcon(data.condition)
 
 			const jobs = []
 			const now = moment.now()
@@ -381,7 +383,7 @@ class Weather extends Controller {
 					const activePokemons = cares.caredPokemons.filter((pokemon) => pokemon.alteringWeathers.includes(data.condition))
 
 					data.activePokemons = activePokemons.slice(0, this.config.weather.showAlteredPokemonMaxCount) || null
-					if (data.activePokemons) {
+					if (data.activePokemons && this.imgUicons) {
 						for (const mon of data.activePokemons) {
 							mon.imgUrl = await this.imgUicons.pokemonIcon(mon.pokemon_id, mon.form)
 						}

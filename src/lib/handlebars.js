@@ -1,6 +1,7 @@
 const handlebars = require('handlebars')
 const config = require('config')
 const moreHandlebars = require('./more-handlebars')
+const partials = require('./partials')
 const {
 	moves, monsters, utilData: {
 		cpMultipliers, types, powerUpCost, emojis,
@@ -31,6 +32,7 @@ function translatorAlt() {
 
 module.exports = () => {
 	moreHandlebars.registerHelpers(handlebars)
+	partials.registerPartials(handlebars)
 
 	handlebars.registerHelper('numberFormat', (value, decimals) => {
 		if (!['string', 'number'].includes(typeof decimals)) decimals = 2 // We may have the handlebars options in the parameter
@@ -38,12 +40,6 @@ module.exports = () => {
 		if (Number.isNaN(+value) || Number.isNaN(+decimals)) return value
 		return Number(+value).toFixed(+decimals)
 	})
-
-	// Doubt this works or is used
-	// handlebars.registerHelper('math', (value, decimals = 2, add = 0, remove = 0, multiply = 1, divide = 1) => {
-	// 	if (Number.isNaN(+value) || Number.isNaN(+decimals) || Number.isNaN(+add) || Number.isNaN(+remove) || Number.isNaN(+multiply) || Number.isNaN(+divide)) return value
-	// 	return Number((+value + +add - +remove) * multiply / divide).toFixed(+decimals)
-	// })
 
 	handlebars.registerHelper('pad0', (value, padTo) => {
 		if (!['string', 'number'].includes(typeof padTo)) padTo = 3 // We may have the handlebars options in the parameter
@@ -67,6 +63,51 @@ module.exports = () => {
 	handlebars.registerHelper('moveEmojiEng', (value, options) => {
 		if (!moves[value]) return ''
 		return types[moves[value].type] ? emoji(options, types[moves[value].type].emoji) : ''
+	})
+
+	handlebars.registerHelper('pokemon', (id, form, options) => {
+		if (form.fn) {
+			// clean up parameters if no form specified
+			options = form
+			form = 0
+		}
+
+		if (!options.fn) return
+
+		const monster = Object.values(monsters).find((m) => m.id === +id && m.form.id === +form)
+		if (!monster) return
+
+		const e = []
+		const n = []
+		monster.types.forEach((type) => {
+			e.push(userTranslator(options).translate(emojiLookup.lookup(types[type.name].emoji, options.data.platform)))
+			n.push(type.name)
+		})
+
+		const formNormalisedEng = monster.form.name === 'Normal' ? '' : monster.form.name
+		const formNormalised = userTranslator(options).translate(formNormalisedEng)
+
+		const nameEng = monster.name
+		const name = userTranslator(options).translate(monster.name)
+		const fullNameEng = nameEng.concat(formNormalisedEng ? ' ' : '', formNormalisedEng)
+		const fullName = name.concat(formNormalised ? ' ' : '', formNormalised)
+
+		return options.fn({
+			name,
+			nameEng,
+			formName: userTranslator(options).translate(monster.form.name),
+			formNameEng: monster.form.name,
+			fullName,
+			fullNameEng,
+			formNormalised,
+			formNormalisedEng,
+			emoji: e,
+			typeNameEng: n,
+			typeName: n.map((type) => userTranslator(options).translate(type)).join(', '),
+			typeEmoji: e.join(''),
+			hasEvolutions: !!(monster.evolutions && monster.evolutions.length),
+			baseStats: monster.stats,
+		})
 	})
 
 	handlebars.registerHelper('pokemonName', (value, options) => {

@@ -2,11 +2,11 @@ const axios = require('axios')
 const NodeCache = require('node-cache')
 const fsp = require('fs').promises
 const FormData = require('form-data')
-
+const util = require('util')
 const { performance } = require('perf_hooks')
 const FairPromiseQueue = require('../FairPromiseQueue')
 
-const hookRegex = new RegExp('(?:(?:https?):\\/\\/|www\\.)(?:\\([-A-Z0-9+&@#\\/%=~_|$?!:,.]*\\)|[-A-Z0-9+&@#\\/%=~_|$?!:,.])*(?:\\([-A-Z0-9+&@#\\/%=~_|$?!:,.]*\\)|[A-Z0-9+&@#\\/%=~_|$])', 'igm')
+const hookRegex = /(?:https?:\/\/|www\.)(?:\([-A-Z0-9+&@#/%=~_|$?!:,.]*\)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:\([-A-Z0-9+&@#/%=~_|$?!:,.]*\)|[A-Z0-9+&@#/%=~_|$])/igm
 
 const noop = () => {}
 
@@ -23,11 +23,13 @@ class DiscordWebhookWorker {
 		this.webhookTimeouts = new NodeCache()
 
 		this.queueProcessor = new FairPromiseQueue(this.webhookQueue, this.config.tuning.concurrentDiscordWebhookConnections, ((t) => t.target))
+	}
 
+	async start() {
 		setImmediate(() => this.init())
 	}
 
-	// eslint-disable-next-line class-methods-use-this
+	// eslint-disable-next-line class-methods-use-this,no-promise-executor-return
 	async sleep(n) { return new Promise((resolve) => setTimeout(resolve, n)) }
 
 	async init() {
@@ -82,7 +84,7 @@ class DiscordWebhookWorker {
 			}
 		} while (retry === true && retryCount < 10)
 
-		if (retryCount === 10 && retry) {
+		if (retry) {
 			this.logs.discord.warn(`${senderId} WEBHOOK given up sending after retries`)
 		}
 		return res
@@ -95,7 +97,10 @@ class DiscordWebhookWorker {
 			data.message.embed.color = parseInt(data.message.embed.color.replace(/^#/, ''), 16)
 		}
 
-		if (data.message.embed) data.message.embeds = [data.message.embed]
+		if (data.message.embed) {
+			data.message.embeds = [data.message.embed]
+			delete data.message.embed
+		}
 		try {
 			const msgDeletionMs = ((data.tth.hours * 3600) + (data.tth.minutes * 60) + data.tth.seconds) * 1000
 
@@ -166,21 +171,25 @@ class DiscordWebhookWorker {
 				const msgId = res.data.id
 				this.webhookTimeouts.set(msgId, data.target, Math.floor(msgDeletionMs / 1000) + 1)
 
-				setTimeout(async () => this.deleteMessage(logReference, data.name, data.target, msgId),
-					msgDeletionMs)
+				setTimeout(
+					async () => this.deleteMessage(logReference, data.name, data.target, msgId),
+					msgDeletionMs,
+				)
 			}
 		} catch (err) {
-			this.logs.discord.error(`${data.logReference}: ${data.name} WEBHOOK failed`, err)
+			this.logs.discord.error(`${data.logReference}: ${data.name} WEBHOOK failed`, util.inspect(err))
 		}
 		return true
 	}
 
 	work(data) {
 		this.webhookQueue.push(data)
-		this.queueProcessor.run(async (work) => (this.sendAlert(work)),
+		this.queueProcessor.run(
+			async (work) => (this.sendAlert(work)),
 			async (err) => {
-				this.logs.log.error('Discord Webhook queueProcessor exception', err)
-			})
+				this.logs.log.error('Discord Webhook queueProcessor exception', util.inspect(err))
+			},
+		)
 	}
 
 	async saveTimeouts() {
@@ -217,7 +226,7 @@ class DiscordWebhookWorker {
 				this.logs.discord.warn(`${logReference}: ${hookName} WEBHOOK Clean got ${cleanRes.status} ${cleanRes.statusText}`)
 			}
 		} catch (err) {
-			this.logs.discord.error(`${logReference}: ${hookName} WEBHOOK Clean failed`, err)
+			this.logs.discord.error(`${logReference}: ${hookName} WEBHOOK Clean failed`, util.inspect(err))
 		}
 	}
 

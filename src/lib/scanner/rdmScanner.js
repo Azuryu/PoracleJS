@@ -9,6 +9,7 @@ class RdmScanner {
 			for (const db of this.dbs) {
 				const row = await db.select('name')
 					.from('gym')
+					// eslint-disable-next-line camelcase
 					.where({ id: gym_id })
 					.first()
 				if (row) return row.name
@@ -25,6 +26,7 @@ class RdmScanner {
 			for (const db of this.dbs) {
 				const row = await db.select('name')
 					.from('pokestop')
+					// eslint-disable-next-line camelcase
 					.where({ id: pokestop_id })
 					.first()
 				if (row) return row.name
@@ -48,10 +50,14 @@ class RdmScanner {
 					.from('pokestop')
 					.whereBetween('lat', [minLat, maxLat])
 					.whereBetween('lon', [minLon, maxLon])
-				const gymRows = await db.select('lat', 'lon', 'team_id', 'availble_slots')
+					.where({ deleted: 0 })
+					.where({ enabled: 1 })
+				const gymRows = await db.select('lat', 'lon', 'team_id', 'available_slots')
 					.from('gym')
 					.whereBetween('lat', [minLat, maxLat])
 					.whereBetween('lon', [minLon, maxLon])
+					.where({ deleted: 0 })
+					.where({ enabled: 1 })
 
 				stopDetails.push(...pokestopRows.map((x) => ({
 					latitude: x.lat,
@@ -64,7 +70,7 @@ class RdmScanner {
 					longitude: x.lon,
 					type: 'gym',
 					teamId: x.team_id,
-					slots: x.availble_slots,
+					slots: x.available_slots,
 				})))
 			}
 			return stopDetails

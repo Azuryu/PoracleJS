@@ -64,7 +64,12 @@ class Query {
 		const matchAreas = []
 
 		for (const areaObj of this.geofence) {
-			if (inside(point, areaObj.path)) matchAreas.push(areaObj.name.toLowerCase())
+			if (areaObj.path && inside(point, areaObj.path)) matchAreas.push(areaObj.name.toLowerCase())
+			if (areaObj.multipath) {
+				for (const p of areaObj.multipath) {
+					if (inside(point, p)) matchAreas.push(areaObj.name.toLowerCase())
+				}
+			}
 		}
 		return matchAreas
 	}
@@ -109,6 +114,14 @@ class Query {
 		}
 	}
 
+	async selectWhereInQuery(table, values, valuesColumn) {
+		try {
+			return this.db.select('*').whereIn(valuesColumn, values).from(table)
+		} catch (err) {
+			throw { source: 'selectWhereInQuery unhappy', error: err }
+		}
+	}
+
 	async updateQuery(table, values, conditions) {
 		try {
 			return this.db(table).update(values).where(conditions)
@@ -136,11 +149,11 @@ class Query {
 		}
 	}
 
-	async misteryQuery(sql) {
+	async mysteryQuery(sql) {
 		try {
 			return this.returnByDatabaseType(await this.db.raw(sql))
 		} catch (err) {
-			throw { source: 'misteryQuery', error: err }
+			throw { source: 'mysteryQuery', error: err }
 		}
 	}
 

@@ -19,7 +19,7 @@ exports.run = async (client, msg, [args]) => {
 		if (!client.config.discord.admins.includes(msg.author.id)) return
 
 		// Check target
-		if (!client.config.discord.admins.includes(msg.author.id) && msg.channel.type === 'text') {
+		if (!client.config.discord.admins.includes(msg.author.id) && msg.channel.type !== 'DM') {
 			return await msg.author.send(client.translator.translate('Please run commands in Direct Messages'))
 		}
 
@@ -40,10 +40,10 @@ exports.run = async (client, msg, [args]) => {
 			return await msg.reply('No guild has been set, either execute inside a channel or specify guild<id>')
 		}
 
-		if (!guild.me.hasPermission(Permissions.FLAGS.MANAGE_WEBHOOKS)) {
+		if (!guild.me.permissions.has(Permissions.FLAGS.MANAGE_WEBHOOKS)) {
 			return await msg.reply('I have not been allowed to manage webhooks!')
 		}
-		if (!guild.me.hasPermission(Permissions.FLAGS.MANAGE_CHANNELS)) {
+		if (!guild.me.permissions.has(Permissions.FLAGS.MANAGE_CHANNELS)) {
 			return await msg.reply('I have not been allowed to manage channels!')
 		}
 
@@ -75,13 +75,13 @@ exports.run = async (client, msg, [args]) => {
 
 		let categoryId
 		if (template.definition.category) {
-			const category = await guild.channels.create(format(template.definition.category, args), { type: 'category' })
+			const category = await guild.channels.create(format(template.definition.category, args), { type: 'GUILD_CATEGORY' })
 			categoryId = category.id
 		}
 
 		for (const channelDefinition of template.definition.channels) {
 			const channelOptions = {
-				type: 'text',
+				type: 'GUILD_TEXT',
 			}
 			if (categoryId) {
 				channelOptions.parent = categoryId
@@ -95,16 +95,33 @@ exports.run = async (client, msg, [args]) => {
 
 			// add role permissions
 			let roleId
-			const allowed = []
 			if (channelDefinition.roles) {
 				const roleOverwrites = []
 				for (const role of channelDefinition.roles) {
+					const allowed = []
+					const deny = []
 					roleId = await guild.roles.cache.get(format(role.id, args))
-					if (role.view) allowed.push('VIEW_CHANNEL')
-					if (role.viewHistory) allowed.push('READ_MESSAGE_HISTORY')
-					if (role.send) allowed.push('SEND_MESSAGES')
-					if (role.react) allowed.push('ADD_REACTIONS')
-					roleOverwrites.push({ id: roleId, allow: allowed })
+					if (role.view) {
+						allowed.push('VIEW_CHANNEL')
+					} else if (role.view === false) {
+						deny.push('VIEW_CHANNEL')
+					}
+					if (role.viewHistory) {
+						allowed.push('READ_MESSAGE_HISTORY')
+					} else if (role.viewHistory === false) {
+						deny.push('READ_MESSAGE_HISTORY')
+					}
+					if (role.send) {
+						allowed.push('SEND_MESSAGES')
+					} else if (role.send === false) {
+						deny.push('SEND_MESSAGES')
+					}
+					if (role.react) {
+						allowed.push('ADD_REACTIONS')
+					} else if (role.react === false) {
+						deny.push('ADD_REACTIONS')
+					}
+					roleOverwrites.push({ id: roleId, allow: allowed, deny })
 				}
 				channelOptions.permissionOverwrites = roleOverwrites
 			}
@@ -134,9 +151,7 @@ exports.run = async (client, msg, [args]) => {
 			} else {
 				const webhookName = channel.name
 				const res = await channel.createWebhook('Poracle')
-				const webhookLink = res.url
-
-				id = webhookLink
+				id = res.url
 				type = 'webhook'
 				name = channelDefinition.webhookName ? format(channelDefinition.webhookName, args) : webhookName
 			}
@@ -169,10 +184,14 @@ exports.run = async (client, msg, [args]) => {
 
 				const cmd = require(`../../../poracleMessage/commands/${cmdName}`)
 
-				await cmd.run(pds, pdm, commandArgs,
+				await cmd.run(
+					pds,
+					pdm,
+					commandArgs,
 					{
 						targetOverride: target,
-					})
+					},
+				)
 			}
 		}
 	} catch (err) {

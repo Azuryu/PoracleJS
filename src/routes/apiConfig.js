@@ -2,7 +2,7 @@ const { version } = require('../../package.json')
 
 module.exports = async (fastify, options, next) => {
 	fastify.get('/api/config/poracleWeb', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
 		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
 
@@ -23,7 +23,10 @@ module.exports = async (fastify, options, next) => {
 			pvpFilterGreatMinCP: fastify.config.pvp.pvpFilterGreatMinCP,
 			pvpFilterUltraMinCP: fastify.config.pvp.pvpFilterUltraMinCP,
 			pvpFilterLittleMinCP: fastify.config.pvp.pvpFilterLittleMinCP,
-			pvpLittleLeagueAllowed: fastify.config.pvp.dataSource === 'internal' || fastify.config.pvp.dataSource === 'chuck',
+			pvpLittleLeagueAllowed: true,
+			pvpCaps: fastify.config.pvp.levelCaps ?? [50],
+			pvpRequiresMinCp: fastify.config.pvp.forceMinCp && fastify.config.pvp.dataSource === 'webhook',
+			defaultPvpCap: fastify.config.tracking.defaultUserTrackingLevelCap || 0,
 			defaultTemplateName: fastify.config.general.defaultTemplateName || '1',
 			channelNotesContainsCategory: fastify.config.discord.checkRole && fastify.config.reconciliation.discord.updateChannelNotes,
 			admins: {
@@ -31,13 +34,16 @@ module.exports = async (fastify, options, next) => {
 				telegram: fastify.config.telegram.admins,
 			},
 			maxDistance: fastify.config.tracking.maxDistance,
+			defaultDistance: fastify.config.tracking.defaultDistance,
 			everythingFlagPermissions: fastify.config.tracking.everythingFlagPermissions,
-
+			disabledHooks: ['Pokemon', 'Raid', 'Pokestop', 'Invasion', 'Lure', 'Quest', 'Weather', 'Nest', 'Gym']
+				.filter((hookType) => fastify.config.general[`disable${hookType}`]).map((hookType) => hookType.toLowerCase()),
+			gymBattles: fastify.config.tracking.enableGymBattle ?? false,
 		}
 	})
 
 	fastify.get('/api/config/templates', options, async (req) => {
-		fastify.logger.info(`API: ${req.ip} ${req.context.config.method} ${req.context.config.url}`)
+		fastify.logger.info(`API: ${req.ip} ${req.routeConfig.method} ${req.routeConfig.url}`)
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) {
 			return {
 				webserver: 'unhappy',

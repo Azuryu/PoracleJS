@@ -13,7 +13,7 @@ class Nest extends Controller {
 		let query = `
 		select humans.id, humans.name, humans.type, humans.language, humans.latitude, humans.longitude, nests.template, nests.distance, nests.clean, nests.ping from nests
 		join humans on (humans.id = nests.id and humans.current_profile_no = nests.profile_no)
-		where humans.enabled = 1 and humans.admin_disable = false and (humans.blocked_alerts IS NULL OR humans.blocked_alerts NOT LIKE '%nest%')and
+		where humans.enabled = 1 and humans.admin_disable = false and (humans.blocked_alerts IS NULL OR humans.blocked_alerts NOT LIKE '%nest%') and
 		((nests.pokemon_id = 0 or nests.pokemon_id='${data.pokemon_id}') and nests.min_spawn_avg <= ${data.pokemon_avg}) and
 		(nests.form = ${data.form} or nests.form = 0)
 		${strictareastring}
@@ -75,17 +75,26 @@ class Nest extends Controller {
 			data.latitude = data.lat
 
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://www.google.com/maps/search/?api=1&query=${data.latitude},${data.longitude}`
+			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
 			data.appleMapUrl = `https://maps.apple.com/maps?daddr=${data.latitude},${data.longitude}`
 			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
+			if (this.config.general.rdmURL) {
+				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@${data.latitude}/@${data.longitude}/18`
+			}
+			if (this.config.general.reactMapURL) {
+				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/nests/${data.nest_id}`
+			}
+			if (this.config.general.rocketMadURL) {
+				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
+			}
 			data.name = this.escapeJsonString(data.name)
 
 			const nestExpiration = data.reset_time + (7 * 24 * 60 * 60)
 			data.tth = moment.preciseDiff(Date.now(), nestExpiration * 1000, true)
-			data.disappearDate = moment(nestExpiration * 1000).tz(geoTz(data.latitude, data.longitude).toString()).format(this.config.locale.date)
-			data.resetDate = moment(data.reset_time * 1000).tz(geoTz(data.latitude, data.longitude).toString()).format(this.config.locale.date)
-			data.disappearTime = moment(nestExpiration * 1000).tz(geoTz(data.latitude, data.longitude).toString()).format(this.config.locale.time)
-			data.resetTime = moment(data.reset_time * 1000).tz(geoTz(data.latitude, data.longitude).toString()).format(this.config.locale.time)
+			data.disappearDate = moment(nestExpiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.date)
+			data.resetDate = moment(data.reset_time * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.date)
+			data.disappearTime = moment(nestExpiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.time)
+			data.resetTime = moment(data.reset_time * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.time)
 
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
@@ -100,7 +109,7 @@ class Nest extends Controller {
 			data.matchedAreas = this.pointInArea([data.latitude, data.longitude])
 			data.matched = data.matchedAreas.map((x) => x.name.toLowerCase())
 
-			if (data.form === undefined || data.form === null) data.form = 0
+			data.form ??= 0
 			const monster = this.GameData.monsters[`${data.pokemon_id}_${data.form}`] || this.GameData.monsters[`${data.pokemon_id}_0`]
 			if (!monster) {
 				this.log.warn(`${logReference}: Couldn't find monster in:`, data)
@@ -116,7 +125,11 @@ class Nest extends Controller {
 			data.pokemonCount = data.pokemon_count
 			data.pokemonSpawnAvg = data.pokemon_avg
 
-			const whoCares = await this.nestWhoCares(data)
+			const whoCares = data.poracleTest ? [{
+				...data.poracleTest,
+				clean: false,
+				ping: '',
+			}] : await this.nestWhoCares(data)
 
 			if (whoCares.length) {
 				this.log.info(`${logReference}: Nest ${data.name} found in areas (${data.matched}) and ${whoCares.length} humans cared.`)
@@ -139,9 +152,9 @@ class Nest extends Controller {
 
 			data.shinyPossible = this.shinyPossible.isShinyPossible(data.pokemonId, data.formId)
 
-			data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
+			if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
 			if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
-			data.stickerUrl = await this.stickerUicons.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
+			if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
 
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []

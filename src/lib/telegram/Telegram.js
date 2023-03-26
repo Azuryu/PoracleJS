@@ -1,14 +1,17 @@
+const { EventEmitter } = require('events')
 const fs = require('fs')
 const fsp = require('fs').promises
 const NodeCache = require('node-cache')
 const mustache = require('handlebars')
+const { performance } = require('perf_hooks')
 const emojiStrip = require('../../util/emojiStrip')
 const FairPromiseQueue = require('../FairPromiseQueue')
 
 const noop = () => {}
 
-class Telegram {
+class Telegram extends EventEmitter {
 	constructor(id, config, logs, GameData, PoracleInfo, dts, geofence, controller, query, scannerQuery, telegraf, translatorFactory, commandParser, re, rehydrateTimeouts = false) {
+		super()
 		this.config = config
 		this.logs = logs
 		this.GameData = GameData
@@ -34,7 +37,9 @@ class Telegram {
 			.use(controller(query, scannerQuery, dts, logs, GameData, PoracleInfo, geofence, config, re, translatorFactory, emojiStrip, mustache))
 
 		this.commands = {}
+	}
 
+	start() {
 		// Handle identify special case on channels & in conversations
 
 		this.bot.on('channel_post', (ctx, next) => {
@@ -109,6 +114,10 @@ class Telegram {
 		if (!command) return
 		if (command.bot && command.bot.toLowerCase() !== ctx.botInfo.username.toLowerCase()) return
 		if (Object.keys(this.commands).includes(command.command)) {
+			ctx.poracleAddMessageQueue = (queue) => this.emit('sendMessages', queue)
+			ctx.poracleAddWebhookQueue = (queue) => this.emit('addWebhook', queue)
+			ctx.poracleReloadAlerts = () => this.emit('refreshAlertCache')
+
 			return this.commands[command.command](ctx)
 		}
 		if (ctx.update.message.chat.type === 'private'
@@ -119,6 +128,7 @@ class Telegram {
 
 	// eslint-disable-next-line class-methods-use-this
 	async sleep(n) {
+		// eslint-disable-next-line no-promise-executor-return
 		return new Promise((resolve) => setTimeout(resolve, n))
 	}
 
@@ -133,10 +143,12 @@ class Telegram {
 	work(data) {
 		this.telegramQueue.push(data)
 		if (!this.busy) {
-			this.queueProcessor.run(async (work) => (this.sendAlert(work)),
+			this.queueProcessor.run(
+				async (work) => (this.sendAlert(work)),
 				async (err) => {
 					this.logs.log.error('Telegram queueProcessor exception', err)
-				})
+				},
+			)
 		}
 	}
 
@@ -189,59 +201,127 @@ class Telegram {
 		return res
 	}
 
-	async sendFormattedMessage(data) {
+	async sendFormattedMessage(data, dataType) {
 		try {
 			const msgDeletionMs = ((data.tth.hours * 3600) + (data.tth.minutes * 60) + data.tth.seconds) * 1000
 			const messageIds = []
 			const logReference = data.logReference ? data.logReference : 'Unknown'
 
 			const senderId = `${logReference}: ${data.name} ${data.target}`
-			try {
-				if (data.message.sticker && data.message.sticker.length > 0) {
-					this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Sticker ${data.message.sticker}`)
 
-					const msg = await this.retrySender(senderId,
-						async () => this.bot.telegram.sendSticker(data.target, data.message.sticker, { disable_notification: true }))
-					messageIds.push(msg.message_id)
+			const sendOrderDefault = ['sticker', 'photo', 'text', 'location', 'venue']
+			const sendOrderDefaultSet = new Set(sendOrderDefault)
+			let sendOrder = data.message.send_order || sendOrderDefault
+			// lowercase, filter unique and check for valid entries
+			sendOrder = sendOrder
+				.map((v) => v.toLowerCase())
+				.filter((v, i, a) => a.indexOf(v) === i)
+				.filter((v) => sendOrderDefaultSet.has(v))
+
+			const startTime = performance.now()
+
+			for (const type of sendOrder) {
+				switch (type) {
+					case 'sticker': {
+						try {
+							if (data.message.sticker && data.message.sticker.length > 0) {
+								this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Sticker ${data.message.sticker}`)
+
+								const msg = await this.retrySender(
+									senderId,
+									async () => this.bot.telegram.sendSticker(data.target, data.message.sticker, { disable_notification: true }),
+								)
+								messageIds.push(msg.message_id)
+							}
+						} catch (err) {
+							this.logs.telegram.info(`${logReference}: #${this.id} -> ${data.name} ${data.target} Failed to send Telegram sticker ${data.message.sticker}`)
+						}
+						break
+					}
+					case 'photo': {
+						try {
+							if (data.message.photo && data.message.photo.length > 0) {
+								this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Photo ${data.message.photo}`)
+
+								const msg = await this.retrySender(
+									senderId,
+									async () => this.bot.telegram.sendPhoto(data.target, data.message.photo, { disable_notification: true }),
+								)
+								messageIds.push(msg.message_id)
+							}
+						} catch (err) {
+							this.logs.telegram.error(`${logReference}: Failed to send Telegram photo ${data.message.photo} to ${data.name}/${data.target}`, err)
+						}
+						break
+					}
+					case 'text': {
+						this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Content`, data.message)
+						let parseMode = 'Markdown'
+						switch ((data.message.parse_mode ?? 'markdown').toLowerCase()) {
+							case 'markdownv2': {
+								parseMode = 'MarkdownV2'
+								break
+							}
+							case 'html': {
+								parseMode = 'HTML'
+								break
+							}
+							default:
+								break
+						}
+						const msg = await this.retrySender(
+							senderId,
+							async () => this.bot.telegram.sendMessage(data.target, data.message.content || data.message || '', {
+								parse_mode: parseMode,
+								disable_web_page_preview: !data.message.webpage_preview,
+							}),
+						)
+						messageIds.push(msg.message_id)
+						break
+					}
+					case 'venue': {
+						if (data.message.venue) {
+							this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Venue ${data.lat} ${data.lat} Title ${data.message.venue.title ?? ''} Address: ${data.message.venue.address ?? ''}`)
+
+							try {
+								// eslint-disable-next-line no-shadow
+								const msg = await this.retrySender(
+									senderId,
+									async () => this.bot.telegram.sendVenue(data.target, data.lat, data.lon, data.message.venue.title ?? '', data.message.venue.address ?? '', { disable_notification: !sendOrder.includes('text') }),
+								)
+								messageIds.push(msg.message_id)
+							} catch (err) {
+								this.logs.telegram.error(`${logReference}: #${this.id} -> ${data.name} ${data.target}  Failed to send Telegram venue ${data.lat} ${data.lat} Title ${data.message.venue.title ?? ''} Address: ${data.message.venue.address ?? ''}`, err)
+							}
+						}
+
+						break
+					}
+					case 'location': {
+						if (data.message.location) {
+							this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Location ${data.lat} ${data.lat}`)
+
+							try {
+								// eslint-disable-next-line no-shadow
+								const msg = await this.retrySender(
+									senderId,
+									async () => this.bot.telegram.sendLocation(data.target, data.lat, data.lon, { disable_notification: true }),
+								)
+								messageIds.push(msg.message_id)
+							} catch (err) {
+								this.logs.telegram.error(`${logReference}: #${this.id} -> ${data.name} ${data.target}  Failed to send Telegram location ${data.lat} ${data.lat}`, err)
+							}
+						}
+						break
+					}
+					default: break
 				}
-			} catch (err) {
-				this.logs.telegram.info(`${logReference}: #${this.id} -> ${data.name} ${data.target} Failed to send Telegram sticker ${data.message.sticker}`)
 			}
-			try {
-				if (data.message.photo && data.message.photo.length > 0) {
-					this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Photo ${data.message.photo}`)
 
-					const msg = await this.retrySender(senderId,
-						async () => this.bot.telegram.sendPhoto(data.target, data.message.photo, { disable_notification: true }))
-					messageIds.push(msg.message_id)
-				}
-			} catch (err) {
-				this.logs.telegram.error(`${logReference}: Failed to send Telegram photo ${data.message.photo} to ${data.name}/${data.target}`, err)
-			}
-			this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Content`, data.message)
-
-			const msg = await this.retrySender(senderId,
-				async () => this.bot.telegram.sendMessage(data.target, data.message.content || data.message || '', {
-					parse_mode: 'Markdown',
-					disable_web_page_preview: !data.message.webpage_preview,
-				}))
-			messageIds.push(msg.message_id)
-
-			if (data.message.location) {
-				this.logs.telegram.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} Location ${data.lat} ${data.lat}`)
-
-				try {
-					// eslint-disable-next-line no-shadow
-					const msg = await this.retrySender(senderId,
-						async () => this.bot.telegram.sendLocation(data.target, data.lat, data.lon, { disable_notification: true }))
-					messageIds.push(msg.message_id)
-				} catch (err) {
-					this.logs.telegram.error(`${logReference}: #${this.id} -> ${data.name} ${data.target}  Failed to send Telegram location ${data.lat} ${data.lat}`, err)
-				}
-			}
+			const endTime = performance.now();
+			(this.config.logger.timingStats ? this.logs.telegram.verbose : this.logs.telegram.debug)(`${logReference}: #${this.id} -> ${data.name} ${data.target} ${dataType} (${endTime - startTime} ms)`)
 
 			if (data.clean) {
-				//				this.log.warn(`Telegram setting to clean in ${msgDeletionMs}ms`)
 				for (const id of messageIds) {
 					this.telegramMessageTimeouts.set(`${id}:${data.target}`, data.target, Math.floor(msgDeletionMs / 1000) + 1)
 				}
@@ -261,19 +341,19 @@ class Telegram {
 	async userAlert(data) {
 		this.logs.telegram.info(`${data.logReference}: #${this.id} -> ${data.name} ${data.target} USER Sending telegram message${data.clean ? ' (clean)' : ''}`)
 
-		return this.sendFormattedMessage(data)
+		return this.sendFormattedMessage(data, 'USER')
 	}
 
 	async groupAlert(data) {
 		this.logs.telegram.info(`${data.logReference}: #${this.id} -> ${data.name} ${data.target} GROUP Sending telegram message${data.clean ? ' (clean)' : ''}`)
 
-		return this.sendFormattedMessage(data)
+		return this.sendFormattedMessage(data, 'GROUP')
 	}
 
 	async channelAlert(data) {
 		this.logs.telegram.info(`${data.logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL Sending telegram message${data.clean ? ' (clean)' : ''}`)
 
-		return this.sendFormattedMessage(data)
+		return this.sendFormattedMessage(data, 'CHANNEL')
 	}
 
 	async saveTimeouts() {

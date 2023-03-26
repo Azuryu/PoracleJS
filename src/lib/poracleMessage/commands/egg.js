@@ -27,8 +27,10 @@ exports.run = async (client, msg, args, options) => {
 		}
 
 		if (args.length === 0) {
-			await msg.reply(translator.translateFormat('Valid commands are e.g. `{0}egg level5`, `{0}egg remove everything`', util.prefix),
-				{ style: 'markdown' })
+			await msg.reply(
+				translator.translateFormat('Valid commands are e.g. `{0}egg level5`, `{0}egg remove everything`', util.prefix),
+				{ style: 'markdown' },
+			)
 			await helpCommand.provideSingleLineHelp(client, msg, util, language, target, commandName)
 			return
 		}
@@ -55,7 +57,7 @@ exports.run = async (client, msg, args, options) => {
 			else if (element === 'valor' || element === 'red') team = 2
 			else if (element === 'mystic' || element === 'blue') team = 1
 			else if (element === 'harmony' || element === 'gray') team = 0
-			else if (element === 'everything') [1, 2, 3, 4, 5, 6].forEach((x) => levelSet.add(x))
+			else if (element === 'everything') [1, 3, 4, 5, 6, 7, 8, 9].forEach((x) => levelSet.add(x))
 			else if (element === 'clean') clean = true
 		})
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
@@ -140,12 +142,15 @@ exports.run = async (client, msg, args, options) => {
 				}
 			}
 
-			await client.query.deleteWhereInQuery('egg', {
-				id: target.id,
-				profile_no: currentProfileNo,
-			},
-			updates.map((x) => x.uid),
-			'uid')
+			await client.query.deleteWhereInQuery(
+				'egg',
+				{
+					id: target.id,
+					profile_no: currentProfileNo,
+				},
+				updates.map((x) => x.uid),
+				'uid',
+			)
 
 			await client.query.insertQuery('egg', [...insert, ...updates])
 

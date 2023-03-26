@@ -18,6 +18,9 @@ class PoracleDiscordState {
 		this.translator = client.translator
 		this.config = client.config
 		this.hastebin = client.hastebin
+		this.addToMessageQueue = (queueEntries) => client.emit('poracleAddMessageQueue', queueEntries)
+		this.addToWebhookQueue = (queueEntries) => client.emit('poracleAddWebhookQueue', queueEntries)
+		this.triggerReloadAlerts = () => client.emit('poracleReloadAlerts')
 	}
 
 	createMessage(msg) {

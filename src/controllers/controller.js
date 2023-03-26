@@ -1,14 +1,7 @@
 const inside = require('point-in-polygon')
-const NodeGeocoder = require('node-geocoder')
 const EventEmitter = require('events')
 const path = require('path')
 const fs = require('fs')
-const { performance } = require('perf_hooks')
-
-const pcache = require('flat-cache')
-
-const geoCache = pcache.load('geoCache', path.join(__dirname, '../../.cache'))
-const emojiFlags = require('country-code-emoji')
 const Uicons = require('../lib/uicons')
 const TileserverPregen = require('../lib/tileserverPregen')
 const replaceAsync = require('../util/stringReplaceAsync')
@@ -18,7 +11,7 @@ const ShlinkUriShortener = require('../lib/shlinkUrlShortener')
 const EmojiLookup = require('../lib/emojiLookup')
 
 class Controller extends EventEmitter {
-	constructor(log, db, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache, weatherData, statsData, eventProviders) {
+	constructor(log, db, geocoder, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache, weatherData, statsData, eventProviders) {
 		super()
 		this.db = db
 		this.scannerQuery = scannerQuery
@@ -31,7 +24,6 @@ class Controller extends EventEmitter {
 		this.translatorFactory = translatorFactory
 		this.translator = translatorFactory ? this.translatorFactory.default : null
 		this.mustache = mustache
-		this.earthRadius = 6371 * 1000 // m
 		this.weatherData = weatherData
 		this.statsData = statsData
 		this.eventParser = eventProviders && eventProviders.pogoEvents
@@ -39,58 +31,12 @@ class Controller extends EventEmitter {
 		//		this.controllerData = weatherCacheData || {}
 		this.tileserverPregen = new TileserverPregen(this.config, this.log)
 		this.emojiLookup = new EmojiLookup(GameData.utilData.emojis)
-		this.imgUicons = new Uicons((this.config.general.images && this.config.general.images[this.constructor.name.toLowerCase()]) || this.config.general.imgUrl, 'png', this.log)
+		this.imgUicons = this.config.general.imgUrl ? new Uicons((this.config.general.images && this.config.general.images[this.constructor.name.toLowerCase()]) || this.config.general.imgUrl, 'png', this.log) : null
 		this.imgUiconsAlt = this.config.general.imgUrlAlt ? new Uicons((this.config.general.imagesAlt && this.config.general.imagesAlt[this.constructor.name.toLowerCase()]) || this.config.general.imgUrlAlt, 'png', this.log) : null
-		this.stickerUicons = new Uicons((this.config.general.stickers && this.config.general.stickers[this.constructor.name.toLowerCase()]) || this.config.general.stickerUrl, 'webp', this.log)
+		this.stickerUicons = this.config.general.stickerUrl ? new Uicons((this.config.general.stickers && this.config.general.stickers[this.constructor.name.toLowerCase()]) || this.config.general.stickerUrl, 'webp', this.log) : null
 		this.dtsCache = {}
+		this.geocoder = geocoder
 		this.shortener = this.getShortener()
-	}
-
-	getGeocoder() {
-		switch (this.config.geocoding.provider.toLowerCase()) {
-			case 'poracle': {
-				return NodeGeocoder({
-					provider: 'openstreetmap',
-					osmServer: this.config.geocoding.providerURL,
-					formatterPattern: this.config.locale.addressFormat,
-					timeout: this.config.tuning.geocodingTimeout || 5000,
-				})
-			}
-			case 'nominatim': {
-				const geocoder = NodeGeocoder({
-					provider: 'openstreetmap',
-					osmServer: this.config.geocoding.providerURL,
-					formatterPattern: this.config.locale.addressFormat,
-					timeout: this.config.tuning.geocodingTimeout || 5000,
-				})
-				// Hack in suburb support
-				// eslint-disable-next-line no-underscore-dangle
-				geocoder._geocoder._formatResult = ((original) => (result) => ({
-					...original(result),
-					suburb: result.address.suburb || '',
-					town: result.address.town || '',
-					village: result.address.village || '',
-					// eslint-disable-next-line no-underscore-dangle
-				}))(geocoder._geocoder._formatResult)
-				return geocoder
-			}
-			case 'google': {
-				return NodeGeocoder({
-					provider: 'google',
-					httpAdapter: 'https',
-					apiKey: this.config.geocoding.geocodingKey[Math.floor(Math.random() * this.config.geocoding.geocodingKey.length)],
-					timeout: this.config.tuning.geocodingTimeout || 5000,
-				})
-			}
-			default:
-			{
-				return NodeGeocoder({
-					provider: 'openstreetmap',
-					formatterPattern: this.config.locale.addressFormat,
-					timeout: this.config.tuning.geocodingTimeout || 5000,
-				})
-			}
-		}
 	}
 
 	buildAreaString(matched) {
@@ -130,7 +76,7 @@ class Controller extends EventEmitter {
 	}
 
 	getDts(logReference, templateType, platform, templateName, language) {
-		if (!templateName) templateName = this.config.general.defaultTemplateName || '1'
+		if (!templateName) templateName = this.config.general.defaultTemplateName?.toString() || '1'
 		templateName = templateName.toLowerCase()
 
 		const key = `${templateType} ${platform} ${templateName} ${language}`
@@ -179,12 +125,36 @@ class Controller extends EventEmitter {
 				return null
 			}
 		} else {
-			if (findDts.template.embed && Array.isArray(findDts.template.embed.description)) {
-				findDts.template.embed.description = findDts.template.embed.description.join('')
+			const loadInclude = (includeString) => {
+				const includePath = includeString.split(' ')[1]
+				const filepath = path.join(__dirname, '../../config/dts', includePath)
+				try {
+					template = fs.readFileSync(filepath, 'utf8')
+				} catch (err) {
+					this.log.error(`${logReference}: Unable to load @include ${includePath} filepath ${filepath} from DTS type: ${findDts.type} platform: ${findDts.platform} language: ${findDts.language} template: ${findDts.template}`)
+					return `Cannot load @include - ${includeString}`
+				}
+				return template
+			}
+
+			if (findDts.template.embed) {
+				for (const field of ['description', 'title']) {
+					if (findDts.template.embed[field]) {
+						if (Array.isArray(findDts.template.embed[field])) {
+							findDts.template.embed[field] = findDts.template.embed[field].join('')
+						}
+						if (findDts.template.embed[field].startsWith('@include')) {
+							findDts.template.embed[field] = loadInclude(findDts.template.embed[field])
+						}
+					}
+				}
 			}
 
 			if (Array.isArray(findDts.template.content)) {
 				findDts.template.content = findDts.template.content.join('')
+			}
+			if (findDts.template.content?.startsWith('@include')) {
+				findDts.template.content = loadInclude(findDts.template.content)
 			}
 
 			template = JSON.stringify(findDts.template)
@@ -239,12 +209,12 @@ class Controller extends EventEmitter {
 				if (tileServerOptions.includeStops && tileServerOptions.pregenerate && this.scannerQuery) {
 					const limits = this.tileserverPregen.limits(data.latitude, data.longitude, tileServerOptions.width, tileServerOptions.height, tileServerOptions.zoom)
 					data.nearbyStops = await this.scannerQuery.getStopData(limits[0][0], limits[0][1], limits[1][0], limits[1][1])
-					if (data.nearbyStops) {
+					if (data.nearbyStops && this.imgUicons) {
 						data.uiconPokestopUrl = await this.imgUicons.pokestopIcon(0)
 						for (const stop of data.nearbyStops) {
 							switch (stop.type) {
 								case 'gym': {
-									stop.imgUrl = await this.imgUicons.gymIcon(stop.teamId, 6 - stop.slots, false, false)
+									stop.imgUrl = await this.imgUicons.gymIcon(stop.teamId, 6 - stop.slots, false, false) || this.config.fallbacks?.imgUrlGym
 									break
 								}
 								case 'pokestop': {
@@ -258,13 +228,20 @@ class Controller extends EventEmitter {
 
 				if (tileServerOptions.type && tileServerOptions.type !== 'none') {
 					if (!tileServerOptions.pregenerate) {
-						data.staticMap = await this.tileserverPregen.getTileURL(logReference, maptype,
+						data.staticMap = await this.tileserverPregen.getTileURL(
+							logReference,
+							maptype,
 							Object.fromEntries(Object.entries(data)
 								.filter(([field]) => keys.includes(field))),
-							tileServerOptions.type)
+							tileServerOptions.type,
+						)
 					} else {
-						data.staticMap = await this.tileserverPregen.getPregeneratedTileURL(logReference, maptype,
-							pregenKeys ? Object.fromEntries(Object.entries(data).filter(([field]) => ['nearbyStops', 'uiconPokestopUrl'].includes(field) || pregenKeys.includes(field))) : data, tileServerOptions.type)
+						data.staticMap = await this.tileserverPregen.getPregeneratedTileURL(
+							logReference,
+							maptype,
+							pregenKeys ? Object.fromEntries(Object.entries(data).filter(([field]) => ['nearbyStops', 'uiconPokestopUrl'].includes(field) || pregenKeys.includes(field))) : data,
+							tileServerOptions.type,
+						)
 					}
 				}
 
@@ -287,30 +264,69 @@ class Controller extends EventEmitter {
 				data.staticMap = ''
 			}
 		}
+		data.staticMap = data.staticMap || this.config.fallbacks?.staticMap
 	}
 
+	// eslint-disable-next-line class-methods-use-this
 	getDistance(start, end) {
-		if (typeof (Number.prototype.toRad) === 'undefined') {
-			// eslint-disable-next-line no-extend-native
-			Number.prototype.toRad = function toRad() {
-				return this * Math.PI / 180
-			}
-		}
-		let lat1 = parseFloat(start.lat)
-		let lat2 = parseFloat(end.lat)
+		const lat1 = parseFloat(start.lat)
+		const lat2 = parseFloat(end.lat)
 		const lon1 = parseFloat(start.lon)
 		const lon2 = parseFloat(end.lon)
 
-		const dLat = (lat2 - lat1).toRad()
-		const dLon = (lon2 - lon1).toRad()
-		lat1 = lat1.toRad()
-		lat2 = lat2.toRad()
+		// https://www.movable-type.co.uk/scripts/latlong.html
 
-		const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-				+ Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2)
+		const R = 6371e3 // metres
+		const φ1 = lat1 * Math.PI / 180 // φ, λ in radians
+		const φ2 = lat2 * Math.PI / 180
+		const Δφ = (lat2 - lat1) * Math.PI / 180
+		const Δλ = (lon2 - lon1) * Math.PI / 180
+
+		const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2)
+			+ Math.cos(φ1) * Math.cos(φ2)
+			* Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
 		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-		const d = this.earthRadius * c
+
+		const d = R * c // in metres
+
 		return Math.ceil(d)
+	}
+
+	// eslint-disable-next-line class-methods-use-this
+	getBearing(start, end) {
+		const lat1 = parseFloat(start.lat)
+		const lat2 = parseFloat(end.lat)
+		const lon1 = parseFloat(start.lon)
+		const lon2 = parseFloat(end.lon)
+
+		// https://www.movable-type.co.uk/scripts/latlong.html
+
+		const φ1 = lat1 * Math.PI / 180 // φ, λ in radians
+		const φ2 = lat2 * Math.PI / 180
+		const λ1 = lon1 * Math.PI / 180 // φ, λ in radians
+		const λ2 = lon2 * Math.PI / 180
+
+		const y = Math.sin(λ2 - λ1) * Math.cos(φ2)
+		const x = Math.cos(φ1) * Math.sin(φ2)
+			- Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1)
+		const θ = Math.atan2(y, x)
+		const brng = (θ * 180 / Math.PI + 360) % 360 // in degrees
+
+		return brng
+	}
+
+	// eslint-disable-next-line class-methods-use-this
+	getBearingEmoji(brng) {
+		if (brng < 22.5) return 'north'
+		if (brng < 45 + 22.5) return 'northwest'
+		if (brng < 90 + 22.5) return 'west'
+		if (brng < 135 + 22.5) return 'southwest'
+		if (brng < 180 + 22.5) return 'south'
+		if (brng < 225 + 22.5) return 'southeast'
+		if (brng < 270 + 22.5) return 'east'
+		if (brng < 315 + 22.5) return 'northeast'
+
+		return 'north'
 	}
 
 	isRateLimited(id) {
@@ -342,72 +358,51 @@ class Controller extends EventEmitter {
 		return s.replace(/"/g, '\'\'').replace(/\n/g, ' ').replace(/\\/g, '?')
 	}
 
-	escapeAddress(a) {
-		a.streetName = this.escapeJsonString(a.streetName)
-		a.addr = this.escapeJsonString(a.addr)
-		return a
-	}
-
 	/**
 	 * Replace URLs with shortened versions if surrounded by <S< >S>
-	 * @param
 	 */
 	// eslint-disable-next-line class-methods-use-this
 	async urlShorten(s) {
-		return replaceAsync(s, /<S<(.*?)>S>/g,
-			async (match, name) => this.shortener.getShortlink(name))
+		return replaceAsync(
+			s,
+			/<S<(.*?)>S>/g,
+			async (match, name) => this.shortener.getShortlink(name),
+		)
 	}
 
 	async getAddress(locationObject) {
-		if (this.config.geocoding.provider.toLowerCase() === 'none') {
-			return { addr: 'Unknown', flag: '' }
+		const addr = await this.geocoder.getAddress(locationObject)
+		for (const key of Object.keys(addr)) {
+			if (typeof addr[key] === 'string') addr[key] = this.escapeJsonString(addr[key])
 		}
-
-		const doGeolocate = async () => {
-			try {
-				const startTime = performance.now()
-				const geocoder = this.getGeocoder()
-				const [result] = await geocoder.reverse(locationObject)
-				const endTime = performance.now();
-				(this.config.logger.timingStats ? this.log.verbose : this.log.debug)(`Geocode ${locationObject.lat},${locationObject.lon} (${endTime - startTime} ms)`)
-
-				const flag = emojiFlags.countryCodeEmoji(result.countryCode)
-				if (!this.addressDts) {
-					this.addressDts = this.mustache.compile(this.config.locale.addressFormat)
-				}
-				result.addr = this.addressDts(result)
-				result.flag = flag || ''
-
-				return this.escapeAddress(result)
-			} catch (err) {
-				this.log.error('getAddress: failed to fetch data', err)
-				return { addr: 'Unknown', flag: '' }
-			}
-		}
-
-		if (this.config.geocoding.cacheDetail === 0) {
-			return doGeolocate()
-		}
-
-		const cacheKey = `${String(+locationObject.lat.toFixed(this.config.geocoding.cacheDetail))}-${String(+locationObject.lon.toFixed(this.config.geocoding.cacheDetail))}`
-		const cachedResult = geoCache.getKey(cacheKey)
-		if (cachedResult) return this.escapeAddress(cachedResult)
-
-		return doGeolocate()
+		return addr
 	}
 
 	pointInArea(point) {
 		if (!this.geofence.length) return []
 		const matchAreas = []
-
 		for (const areaObj of this.geofence) {
-			if (inside(point, areaObj.path)) {
-				matchAreas.push({
-					name: areaObj.name,
-					description: areaObj.description,
-					displayInMatches: areaObj.displayInMatches === undefined || !!areaObj.displayInMatches,
-					group: areaObj.group,
-				})
+			if (areaObj.path) {
+				if (inside(point, areaObj.path)) {
+					matchAreas.push({
+						name: areaObj.name,
+						description: areaObj.description,
+						displayInMatches: areaObj.displayInMatches ?? true,
+						group: areaObj.group,
+					})
+				}
+			} else if (areaObj.multipath) {
+				for (const p of areaObj.multipath) {
+					if (inside(point, p)) {
+						matchAreas.push({
+							name: areaObj.name,
+							description: areaObj.description,
+							displayInMatches: areaObj.displayInMatches ?? true,
+							group: areaObj.group,
+						})
+						break
+					}
+				}
 			}
 		}
 		return matchAreas
@@ -419,7 +414,7 @@ class Controller extends EventEmitter {
 		try {
 			return await this.db.select('*').from(table).where(conditions).first()
 		} catch (err) {
-			throw { source: 'slectOneQuery', error: err }
+			throw { source: 'selectOneQuery', error: err }
 		}
 	}
 
@@ -466,11 +461,11 @@ class Controller extends EventEmitter {
 		}
 	}
 
-	async misteryQuery(sql) {
+	async mysteryQuery(sql) {
 		try {
 			return this.returnByDatabaseType(await this.db.raw(sql))
 		} catch (err) {
-			throw { source: 'misteryQuery', error: err }
+			throw { source: 'mysteryQuery', error: err }
 		}
 	}
 

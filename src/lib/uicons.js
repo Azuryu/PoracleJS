@@ -5,8 +5,7 @@ const mutex = new Mutex()
 const uiconsIndex = {}
 const lastRetrieved = {}
 
-function resolvePokemonIcon(availPokemon, imageType, pokemonId, form = 0, evolution = 0, gender = 0, costume = 0,
-	shiny = false) {
+function resolvePokemonIcon(availPokemon, imageType, pokemonId, form = 0, evolution = 0, gender = 0, costume = 0, shiny = false) {
 	const evolutionSuffixes = evolution ? [`_e${evolution}`, ''] : ['']
 	const formSuffixes = form ? [`_f${form}`, ''] : ['']
 	const costumeSuffixes = costume ? [`_c${costume}`, ''] : ['']
@@ -118,11 +117,23 @@ async function getAvailableIcons(log, baseUrl) {
 				currentSet = uiconsIndex[baseUrl]
 				lastRetrievedDate = lastRetrieved[baseUrl]
 				if (currentSet === undefined || lastRetrievedDate === undefined || Date.now() - lastRetrievedDate > maxAge) {
+					log.debug(`Fetching UICONS index from ${baseUrl}`)
+
+					const timeoutMs = 10000
+					const source = axios.CancelToken.source()
+					const timeout = setTimeout(() => {
+						source.cancel(`Timeout waiting for response - ${timeoutMs}ms`)
+						// Timeout Logic
+					}, timeoutMs)
+
 					const response = await axios({
 						method: 'get',
 						url: `${baseUrl}/index.json`,
 						validateStatus: ((status) => status < 500),
+						cancelToken: source.token,
 					})
+					clearTimeout(timeout)
+
 					switch (response.status) {
 						case 404: {
 							log.verbose(`Got 404 for UICONS data file from ${baseUrl}`)
@@ -174,7 +185,7 @@ class Uicons {
 	constructor(url, imageType, log, fallback) {
 		this.url = url.endsWith('/') ? url.slice(0, -1) : url
 		this.imageType = imageType || 'png'
-		this.fallback = fallback === undefined ? true : fallback
+		this.fallback = fallback ?? true
 		this.log = log || console
 	}
 

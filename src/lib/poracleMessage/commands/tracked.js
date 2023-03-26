@@ -38,21 +38,22 @@ function monsterRowText(config, translator, GameData, monster) {
 	let minRarity = monster.rarity
 	if (minRarity === -1) minRarity = 1
 
+	let minSize = monster.size
+	if (minSize < 1) minSize = 1
+
 	const pvpString = monster.pvp_ranking_league
-		? translator.translate('pvp ranking:').concat(' ',
+		? translator.translate('pvp ranking:').concat(
+			' ',
 			{
 				500: translator.translate('littlepvp'),
 				1500: translator.translate('greatpvp'),
 				2500: translator.translate('ultrapvp'),
 			}[monster.pvp_ranking_league].toString(),
-			` top${monster.pvp_ranking_best > 1 ? `${monster.pvp_ranking_best}-` : ''}${monster.pvp_ranking_worst} (@${monster.pvp_ranking_min_cp}+)`)
+			` top${monster.pvp_ranking_best > 1 ? `${monster.pvp_ranking_best}-` : ''}${monster.pvp_ranking_worst} (@${monster.pvp_ranking_min_cp}+${monster.pvp_ranking_cap ? ` ${translator.translate('level cap:')}${monster.pvp_ranking_cap}` : ''})`,
+		)
 		: ''
 
-	// const greatLeague = monster.great_league_ranking >= 4096 ? translator.translate('any') : `top${monster.great_league_ranking_highest > 1 ? `${monster.great_league_ranking_highest}-` : ''}${monster.great_league_ranking} (@${monster.great_league_ranking_min_cp}+)`
-	// const ultraLeague = monster.ultra_league_ranking >= 4096 ? translator.translate('any') : `top${monster.ultra_league_ranking_highest > 1 ? `${monster.ultra_league_ranking_highest}-` : ''}${monster.ultra_league_ranking} (@${monster.ultra_league_ranking_min_cp}+)`
-	// const littleLeague = monster.little_league_ranking >= 4096 ? translator.translate('any') : `top${monster.little_league_ranking_highest > 1 ? `${monster.little_league_ranking_highest}-` : ''}${monster.little_league_ranking} (@${monster.little_league_ranking_min_cp}+)`
-
-	return `**${translator.translate(`${monsterName}`)}** ${translator.translate(`${formName}`)} ${monster.distance ? ` | ${translator.translate('distance')}: ${monster.distance}m` : ''} | ${translator.translate('iv')}: ${miniv}%-${monster.max_iv}% | ${translator.translate('cp')}: ${monster.min_cp}-${monster.max_cp} | ${translator.translate('level')}: ${monster.min_level}-${monster.max_level} | ${translator.translate('stats')}: ${monster.atk}/${monster.def}/${monster.sta} - ${monster.max_atk}/${monster.max_def}/${monster.max_sta}${pvpString ? ` | ${pvpString}` : ''}${(monster.rarity > 0 || monster.max_rarity < 6) ? ` | ${translator.translate('rarity')}: ${translator.translate(GameData.utilData.rarity[minRarity])}-${translator.translate(GameData.utilData.rarity[monster.max_rarity])}` : ''}${monster.gender ? ` | ${translator.translate('gender')}: ${GameData.utilData.genders[monster.gender].emoji}` : ''}${monster.min_time ? ` | ${translator.translate('minimum time:')} ${monster.min_time}s` : ''} ${standardText(config, translator, monster)}`
+	return `**${translator.translate(`${monsterName}`)}** ${translator.translate(`${formName}`)} ${monster.distance ? ` | ${translator.translate('distance')}: ${monster.distance}m` : ''} | ${translator.translate('iv')}: ${miniv}%-${monster.max_iv}% | ${translator.translate('cp')}: ${monster.min_cp}-${monster.max_cp} | ${translator.translate('level')}: ${monster.min_level}-${monster.max_level} | ${translator.translate('stats')}: ${monster.atk}/${monster.def}/${monster.sta} - ${monster.max_atk}/${monster.max_def}/${monster.max_sta}${pvpString ? ` | ${pvpString}` : ''}${(monster.size > 0 || monster.max_size < 6) ? ` | ${translator.translate('size')}: ${translator.translate(GameData.utilData.size[minSize])}-${translator.translate(GameData.utilData.size[monster.max_size])}` : ''}${(monster.rarity > 0 || monster.max_rarity < 6) ? ` | ${translator.translate('rarity')}: ${translator.translate(GameData.utilData.rarity[minRarity])}-${translator.translate(GameData.utilData.rarity[monster.max_rarity])}` : ''}${monster.gender ? ` | ${translator.translate('gender')}: ${GameData.utilData.genders[monster.gender].emoji}` : ''}${monster.min_time ? ` | ${translator.translate('minimum time:')} ${monster.min_time}s` : ''} ${standardText(config, translator, monster)}`
 }
 
 async function raidRowText(config, translator, GameData, raid, scannerQuery) {
@@ -154,7 +155,7 @@ function questRowText(config, translator, GameData, quest) {
 
 function invasionRowText(config, translator, GameData, invasion) {
 	let genderText = ''
-	let typeText = ''
+	let typeText
 	if (!invasion.gender || invasion.gender === '') {
 		genderText = translator.translate('any')
 	} else if (invasion.gender === 1) {
@@ -174,7 +175,7 @@ function invasionRowText(config, translator, GameData, invasion) {
 }
 
 function lureRowText(config, translator, GameData, lure) {
-	let typeText = ''
+	let typeText
 
 	if (lure.lure_id === 0) {
 		typeText = 'any'
@@ -237,7 +238,7 @@ exports.run = async (client, msg, args, options) => {
 
 		const blocked = human.blocked_alerts ? JSON.parse(human.blocked_alerts) : []
 
-		const maplink = `https://www.google.com/maps/search/?api=1&query=${human.latitude},${human.longitude}`
+		const maplink = `https://maps.google.com/maps?q=${human.latitude},${human.longitude}`
 		if (args.includes('area')) {
 			return msg.reply(currentAreaText(translator, client.geofence, JSON.parse(human.area)))
 		}
