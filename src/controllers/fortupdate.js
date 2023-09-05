@@ -5,17 +5,22 @@ const Controller = require('./controller')
 /**
  * Controller for processing nest webhooks
  */
-class Nest extends Controller {
-	async nestWhoCares(obj) {
+class FortUpdate extends Controller {
+	async fortUpdateWhoCares(obj) {
 		const data = obj
 		const { areastring, strictareastring } = this.buildAreaString(data.matched)
 
+		let changestring = '1 = 0 '
+		data.changeTypes.forEach((change) => {
+			changestring = changestring.concat(`or forts.change_types like '%"${change}"%' `)
+		})
+
 		let query = `
-		select humans.id, humans.name, humans.type, humans.language, humans.latitude, humans.longitude, nests.template, nests.distance, nests.clean, nests.ping from nests
-		join humans on (humans.id = nests.id and humans.current_profile_no = nests.profile_no)
-		where humans.enabled = 1 and humans.admin_disable = false and (humans.blocked_alerts IS NULL OR humans.blocked_alerts NOT LIKE '%nest%') and
-		((nests.pokemon_id = 0 or nests.pokemon_id='${data.pokemon_id}') and nests.min_spawn_avg <= ${data.pokemon_avg}) and
-		(nests.form = ${data.form} or nests.form = 0)
+		select humans.id, humans.name, humans.type, humans.language, humans.latitude, humans.longitude, forts.template, forts.distance, forts.ping from forts
+		join humans on (humans.id = forts.id and humans.current_profile_no = forts.profile_no)
+		where humans.enabled = 1 and humans.admin_disable = false and (humans.blocked_alerts IS NULL OR humans.blocked_alerts NOT LIKE '%forts%') and
+		((forts.fort_type = 'everything' or forts.fort_type = '${data.fortType}') and (forts.change_types = '[]' or (${changestring}))
+		${data.isEmpty ? 'and forts.include_empty = 1' : ''})
 		${strictareastring}
 		`
 
@@ -32,10 +37,10 @@ class Nest extends Controller {
 						+ sin( radians(${data.latitude}) )
 						* sin( radians( humans.latitude ) )
 						)
-					) < nests.distance and nests.distance != 0)
+					) < forts.distance and forts.distance != 0)
 					or
 					(
-						nests.distance = 0 and (${areastring})
+						forts.distance = 0 and (${areastring})
 					)
 			)
 			`)
@@ -69,11 +74,13 @@ class Nest extends Controller {
 		// const minTth = this.config.general.alertMinimumTime || 0
 
 		try {
-			const logReference = data.nest_id
+			data.id = data.old?.id || data.new?.id
+			const logReference = data.id
 
-			data.longitude = data.lon
-			data.latitude = data.lat
+			data.longitude = data.new?.location?.lon || data.old?.location?.lon
+			data.latitude = data.new?.location?.lat || data.old?.location?.lat
 
+			data.fortType = data.new?.type || data.old?.type || 'unknown'
 			Object.assign(data, this.config.general.dtsDictionary)
 			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
 			data.appleMapUrl = `https://maps.apple.com/maps?daddr=${data.latitude},${data.longitude}`
@@ -82,7 +89,7 @@ class Nest extends Controller {
 				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@${data.latitude}/@${data.longitude}/18`
 			}
 			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/nests/${data.nest_id}`
+				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/${data.fortType}s/${data.id}/18`
 			}
 			if (this.config.general.rocketMadURL) {
 				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
@@ -109,32 +116,93 @@ class Nest extends Controller {
 			data.matchedAreas = this.pointInArea([data.latitude, data.longitude])
 			data.matched = data.matchedAreas.map((x) => x.name.toLowerCase())
 
-			data.form ??= 0
-			const monster = this.GameData.monsters[`${data.pokemon_id}_${data.form}`] || this.GameData.monsters[`${data.pokemon_id}_0`]
-			if (!monster) {
-				this.log.warn(`${logReference}: Couldn't find monster in:`, data)
-				return
+			// If this is a change from an empty fort (eg after a GMO), treat it as 'new' in poracle
+			if (data.change_type === 'edit' && !(data.old?.name || data.old?.description)) {
+				data.change_type = 'new'
+				data.edit_types = null
 			}
 
-			data.nestName = this.escapeJsonString(data.name)
-			data.pokemonId = data.pokemon_id
-			data.nameEng = monster.name
-			data.formId = monster.form.id
-			data.formNameEng = monster.form.name
-			data.color = this.GameData.utilData.types[monster.types[0].name].color
-			data.pokemonCount = data.pokemon_count
-			data.pokemonSpawnAvg = data.pokemon_avg
+			data.changeTypes = []
+			if (data.edit_types) data.changeTypes.push(...data.edit_types)
+			data.changeTypes.push(data.change_type)
+			data.isEmpty = !(data.new?.name || data.new?.description || data.old?.name)
+
+			// clean everything
+
+			if (data.new) {
+				if (data.new.name) data.new.name = this.escapeJsonString(data.new.name)
+				if (data.new.description) data.new.description = this.escapeJsonString(data.new.description)
+			}
+
+			if (data.old) {
+				if (data.old.name) data.old.name = this.escapeJsonString(data.old.name)
+				if (data.old.description) data.old.description = this.escapeJsonString(data.old.description)
+			}
+
+			// helpers
+
+			data.isEdit = data.change_type === 'edit'
+			data.isNew = data.change_type === 'new'
+			data.isRemoval = data.change_type === 'removal'
+
+			data.isEditLocation = data.changeTypes.includes('location')
+			data.isEditName = data.changeTypes.includes('name')
+			data.isEditDescription = data.changeTypes.includes('description')
+			data.isEditImageUrl = data.changeTypes.includes('image_url')
+			data.isEditImgUrl = data.isEditImageUrl
+
+			data.oldName = data.old?.name ?? ''
+			data.oldDescription = data.old?.description ?? ''
+			data.oldImageUrl = data.old?.image_url ?? ''
+			data.oldImgUrl = data.oldImageUrl
+			data.oldLatitude = data.old?.location?.lat || 0.0
+			data.oldLongitude = data.old?.location?.lon || 0.0
+
+			data.newName = data.new?.name ?? ''
+			data.newDescription = data.new?.description ?? ''
+			data.newImageUrl = data.new?.image_url ?? ''
+			data.newImgUrl = data.newImageUrl
+			data.newLatitude = data.new?.location?.lat || 0.0
+			data.newLongitude = data.new?.location?.lon || 0.0
+
+			data.fortTypeText = data.fortType === 'pokestop' ? 'Pokestop' : 'Gym'
+			// eslint-disable-next-line default-case
+			switch (data.change_type) {
+				case 'edit':
+					data.changeTypeText = 'Edit'
+					break
+				case 'removal':
+					data.changeTypeText = 'Removal'
+					break
+				case 'new':
+					data.changeTypeText = 'New'
+					break
+			}
+
+			data.name = data.new?.name || data.old?.name || 'unknown'
+			data.name = this.escapeJsonString(data.name)
+			data.description = data.new?.description || data.old?.description || 'unknown'
+			data.imgUrl = data.new?.image_url || data.old?.image_url || ''
+
+			if (data.old) {
+				data.old.imgUrl = data.old.image_url
+				data.old.imageUrl = data.old.image_url
+			}
+			if (data.new) {
+				data.new.imgUrl = data.new.image_url
+				data.new.imageUrl = data.new.image_url
+			}
 
 			const whoCares = data.poracleTest ? [{
 				...data.poracleTest,
 				clean: false,
 				ping: '',
-			}] : await this.nestWhoCares(data)
+			}] : await this.fortUpdateWhoCares(data)
 
 			if (whoCares.length) {
-				this.log.info(`${logReference}: Nest ${data.name} found in areas (${data.matched}) and ${whoCares.length} humans cared.`)
+				this.log.info(`${logReference}: Fort Update ${data.fortType} ${data.id} ${data.name} found in areas (${data.matched}) and ${whoCares.length} humans cared.`)
 			} else {
-				this.log.verbose(`${logReference}: Nest ${data.name} found in areas (${data.matched}) and ${whoCares.length} humans cared.`)
+				this.log.verbose(`${logReference}: Fort Update ${data.fortType} ${data.id} ${data.name} found in areas (${data.matched}) and ${whoCares.length} humans cared.`)
 			}
 
 			let discordCacheBad = true // assume the worst
@@ -152,45 +220,45 @@ class Nest extends Controller {
 
 			data.shinyPossible = this.shinyPossible.isShinyPossible(data.pokemonId, data.formId)
 
-			if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
-			if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
-			if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
+			data.stickerUrl = data.imgUrl
 
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []
 
-			// Attempt to calculate best position for nest
+			// Attempt to calculate best position for map
+			const markers = []
+			if (data.old?.location?.lat) {
+				markers.push({ latitude: data.old.location.lat, longitude: data.old.location.lon })
+			}
+			if (data.new?.location?.lat) {
+				markers.push({ latitude: data.new.location.lat, longitude: data.new.location.lon })
+			}
+
 			const position = this.tileserverPregen.autoposition({
-				polygons:
-					JSON.parse(data.poly_path).map((x) => ({ path: x })),
+				markers,
 			}, 500, 250)
 			data.zoom = Math.min(position.zoom, 16)
 			data.map_longitude = position.longitude
 			data.map_latitude = position.latitude
 
-			await this.getStaticMapUrl(logReference, data, 'nest', ['map_latitude', 'map_longitude', 'zoom', 'imgUrl', 'poly_path'])
+			await this.getStaticMapUrl(logReference, data, 'fort-update', ['map_latitude', 'map_longitude', 'longitude', 'latitude', 'zoom', 'imgUrl', 'isEditLocation', 'oldLatitude', 'oldLongitude', 'newLatitude', 'newLongitude'])
 			data.staticmap = data.staticMap // deprecated
 
 			for (const cares of whoCares) {
-				this.log.debug(`${logReference}: Creating nest alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
+				this.log.debug(`${logReference}: Creating fort update alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
 				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
 				if (rateLimitTtr) {
-					this.log.verbose(`${logReference}: Not creating nest (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
+					this.log.verbose(`${logReference}: Not creating fort update (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
 					// eslint-disable-next-line no-continue
 					continue
 				}
-				this.log.verbose(`${logReference}: Creating nest alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
+				this.log.verbose(`${logReference}: Creating fort update alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 				const language = cares.language || this.config.general.locale
-				const translator = this.translatorFactory.Translator(language)
+				//				const translator = this.translatorFactory.Translator(language)
 				let [platform] = cares.type.split(':')
 				if (platform === 'webhook') platform = 'discord'
-
-				// full build
-				data.name = translator.translate(data.nameEng)
-				data.formName = translator.translate(data.formNameEng)
-				data.shinyPossibleEmoji = data.shinyPossible ? translator.translate(this.emojiLookup.lookup('shiny', platform)) : ''
 
 				const view = {
 					...geoResult,
@@ -205,7 +273,7 @@ class Nest extends Controller {
 					areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
 				}
 
-				const templateType = 'nest'
+				const templateType = 'fort-update'
 				const message = await this.createMessage(logReference, templateType, platform, cares.template, language, cares.ping, view)
 
 				const work = {
@@ -216,7 +284,7 @@ class Nest extends Controller {
 					type: cares.type,
 					name: cares.name,
 					tth: data.tth,
-					clean: cares.clean,
+					clean: false,
 					emoji: data.emoji,
 					logReference,
 					language,
@@ -227,9 +295,9 @@ class Nest extends Controller {
 
 			return jobs
 		} catch (e) {
-			this.log.error(`${data.pokestop_id}: Can't seem to handle nest: `, e, data)
+			this.log.error(`${data.pokestop_id}: Can't seem to handle fort update: `, e, data)
 		}
 	}
 }
 
-module.exports = Nest
+module.exports = FortUpdate

@@ -29,7 +29,7 @@ exports.run = async (client, msg, args, options) => {
 
 		if (args.length === 0) {
 			await msg.reply(
-				translator.translateFormat('Valid commands are e.g. `{0}invasion giovanni`, `{0}invasion dragon`, `{0}invasion remove everything`', util.prefix),
+				translator.translateFormat('Valid commands are e.g. `{0}incident giovanni`, `{0}incident dragon`, `{0}incident remove everything`', util.prefix),
 				{ style: 'markdown' },
 			)
 			await helpCommand.provideSingleLineHelp(client, msg, util, language, target, commandName)
@@ -37,6 +37,7 @@ exports.run = async (client, msg, args, options) => {
 		}
 
 		const typeArray = Object.values(client.GameData.grunts).map((grunt) => grunt.type.toLowerCase())
+		const eventArray = Object.values(client.GameData.utilData.pokestopEvent).map((x) => x.name.toLowerCase())
 
 		let reaction = '👌'
 		const remove = !!args.find((arg) => arg === 'remove')
@@ -55,6 +56,7 @@ exports.run = async (client, msg, args, options) => {
 			else if (element === 'male') gender = 1
 			else if (element === 'clean') clean = true
 			else if (typeArray.includes(element) || element === 'everything') types.push(element)
+			else if (eventArray.includes(element)) types.push(element)
 		}
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance

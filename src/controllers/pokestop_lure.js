@@ -153,9 +153,11 @@ class Lure extends Controller {
 					})
 					const jobs = []
 
-					require('./common/nightTime').setNightTime(data, disappearTime)
+					require('./common/nightTime').setNightTime(data, disappearTime, this.config)
 
-					await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId'])
+					await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId', 'style'])
+					data.intersection = await this.obtainIntersection(data)
+
 					data.staticmap = data.staticMap // deprecated
 
 					for (const cares of whoCares) {

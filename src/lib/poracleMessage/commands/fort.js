@@ -25,10 +25,11 @@ exports.run = async (client, msg, args, options) => {
 			await msg.react('🚫')
 			return msg.reply(translator.translate('You do not have permission to execute this command'))
 		}
-
 		if (args.length === 0) {
+			const tipMsg = 'Valid commands are e.g. `{0}fort everything`, `{0}fort pokestop include_empty`, `{0}fort gym removal`'
+
 			await msg.reply(
-				translator.translateFormat('Valid commands are e.g. `{0}egg level5`, `{0}egg remove everything`', util.prefix),
+				translator.translateFormat(tipMsg, util.prefix),
 				{ style: 'markdown' },
 			)
 			await helpCommand.provideSingleLineHelp(client, msg, util, language, target, commandName)
@@ -40,25 +41,27 @@ exports.run = async (client, msg, args, options) => {
 		const remove = !!args.find((arg) => arg === 'remove')
 		const commandEverything = !!args.find((arg) => arg === 'everything')
 
-		let exclusive = 0
 		let distance = 0
-		let team = 4
 		let template = client.config.general.defaultTemplateName
-		let clean = false
-		const levelSet = new Set()
+		let includeEmpty = false
+		const changes = []
 		const pings = msg.getPings()
 
+		let fortType
+
 		args.forEach((element) => {
-			if (element === 'ex') exclusive = 1
-			else if (element.match(client.re.levelRe)) levelSet.add(+element.match(client.re.levelRe)[2])
-			else if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
+			if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
 			else if (element.match(client.re.dRe)) [,, distance] = element.match(client.re.dRe)
-			else if (element === 'instinct' || element === 'yellow') team = 3
-			else if (element === 'valor' || element === 'red') team = 2
-			else if (element === 'mystic' || element === 'blue') team = 1
-			else if (element === 'harmony' || element === 'gray') team = 0
-			else if (element === 'everything') Object.keys(client.GameData.utilData.raidLevels).forEach((x) => levelSet.add(+x))
-			else if (element === 'clean') clean = true
+			else if (element === 'pokestop') fortType = 'pokestop'
+			else if (element === 'gym') fortType = 'gym'
+			else if (element === 'everything') fortType = 'everything'
+
+			else if (element === 'include empty') includeEmpty = true
+			else if (element === 'location') changes.push('location')
+			else if (element === 'name') changes.push('name')
+			else if (element === 'photo') changes.push('image_url')
+			else if (element === 'removal') changes.push('removal')
+			else if (element === 'new') changes.push('new')
 		})
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance
@@ -75,34 +78,30 @@ exports.run = async (client, msg, args, options) => {
 			distance = client.config.tracking.defaultDistance
 		}
 
-		const levels = [...levelSet]
-
-		if (!levels.length) {
-			return await msg.reply(translator.translate('404 No raid egg levels found'))
-		}
+		// if (!teams.length) {
+		// 	return await msg.reply(translator.translate('404 No team types found'))
+		// }
 
 		if (!remove) {
-			const insert = levels.map((lvl) => ({
+			const insert = [{
 				id: target.id,
 				profile_no: currentProfileNo,
 				ping: pings,
-				exclusive: +exclusive,
 				template: template.toString(),
 				distance: +distance,
-				team: +team,
-				clean: +clean,
-				level: +lvl,
-				gym_id: null,
-			}))
+				fort_type: fortType,
+				include_empty: includeEmpty,
+				change_types: JSON.stringify(changes),
+			}]
 
-			const tracked = await client.query.selectAllQuery('egg', { id: target.id, profile_no: currentProfileNo })
+			const tracked = await client.query.selectAllQuery('forts', { id: target.id, profile_no: currentProfileNo })
 			const updates = []
 			const alreadyPresent = []
 
 			for (let i = insert.length - 1; i >= 0; i--) {
 				const toInsert = insert[i]
 
-				for (const existing of tracked.filter((x) => x.level === toInsert.level)) {
+				for (const existing of tracked.filter((x) => x.team === toInsert.team)) {
 					const differences = client.updatedDiff(existing, toInsert)
 
 					switch (Object.keys(differences).length) {
@@ -131,19 +130,19 @@ exports.run = async (client, msg, args, options) => {
 			if ((alreadyPresent.length + updates.length + insert.length) > 50) {
 				message = translator.translateFormat('I have made a lot of changes. See {0}{1} for details', util.prefix, translator.translate('tracked'))
 			} else {
-				for (const egg of alreadyPresent) {
-					message = message.concat(translator.translate('Unchanged: '), await trackedCommand.eggRowText(client.config, translator, client.GameData, egg, client.scannerQuery), '\n')
+				for (const lure of alreadyPresent) {
+					message = message.concat(translator.translate('Unchanged: '), await trackedCommand.fortUpdateRowText(client.config, translator, client.GameData, lure, client.scannerQuery), '\n')
 				}
-				for (const egg of updates) {
-					message = message.concat(translator.translate('Updated: '), await trackedCommand.eggRowText(client.config, translator, client.GameData, egg, client.scannerQuery), '\n')
+				for (const lure of updates) {
+					message = message.concat(translator.translate('Updated: '), await trackedCommand.fortUpdateRowText(client.config, translator, client.GameData, lure, client.scannerQuery), '\n')
 				}
-				for (const egg of insert) {
-					message = message.concat(translator.translate('New: '), await trackedCommand.eggRowText(client.config, translator, client.GameData, egg, client.scannerQuery), '\n')
+				for (const lure of insert) {
+					message = message.concat(translator.translate('New: '), await trackedCommand.fortUpdateRowText(client.config, translator, client.GameData, lure, client.scannerQuery), '\n')
 				}
 			}
 
 			await client.query.deleteWhereInQuery(
-				'egg',
+				'forts',
 				{
 					id: target.id,
 					profile_no: currentProfileNo,
@@ -152,29 +151,31 @@ exports.run = async (client, msg, args, options) => {
 				'uid',
 			)
 
-			await client.query.insertQuery('egg', [...insert, ...updates])
+			await client.query.insertQuery('forts', [...insert, ...updates])
 
-			client.log.info(`${logReference}: ${target.name} started tracking level ${levels.join(', ')} eggs`)
+			client.log.info(`${logReference}: ${target.name} started tracking for fort updates ${changes.join(', ')}`)
 			await msg.reply(message, { style: 'markdown' })
+
 			reaction = insert.length ? '✅' : reaction
 		} else {
 			let result = 0
-			if (levels.length) {
-				const lvlResult = await client.query.deleteWhereInQuery('egg', {
-					id: target.id,
-					profile_no: currentProfileNo,
-				}, levels, 'level')
-				client.log.info(`${logReference}: ${target.name} stopped tracking level ${levels.join(', ')} eggs`)
-				result += lvlResult
-			}
+			// if (teams.length) {
+			// 	const lvlResult = await client.query.deleteWhereInQuery('forts', {
+			// 		id: target.id,
+			// 		profile_no: currentProfileNo,
+			// 	}, teams, 'team')
+			// 	client.log.info(`${logReference}: ${target.name} stopped tracking gym ${teams.join(', ')}`)
+			// 	result += lvlResult
+			// }
 			if (commandEverything) {
-				const everythingResult = await client.query.deleteQuery('egg', {
+				const everythingResult = await client.query.deleteQuery('forts', {
 					id: target.id,
 					profile_no: currentProfileNo,
 				})
-				client.log.info(`${logReference}: ${target.name} stopped tracking all eggs`)
+				client.log.info(`${logReference}: ${target.name} stopped tracking all gyms`)
 				result += everythingResult
 			}
+
 			msg.reply(
 				''.concat(
 					result === 1 ? translator.translate('I removed 1 entry')
@@ -184,12 +185,13 @@ exports.run = async (client, msg, args, options) => {
 				),
 				{ style: 'markdown' },
 			)
+
 			reaction = result || client.config.database.client === 'sqlite' ? '✅' : reaction
 		}
 
 		await msg.react(reaction)
 	} catch (err) {
-		client.log.error(`${logReference}: egg command unhappy:`, err)
+		client.log.error(`${logReference}: fort command unhappy:`, err)
 		msg.reply(`There was a problem making these changes, the administrator can find the details with reference ${logReference}`)
 	}
 }
